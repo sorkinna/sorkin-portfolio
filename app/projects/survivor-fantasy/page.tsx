@@ -298,7 +298,7 @@ export default function SurvivorFantasy() {
               <li>Team Immunity Win – <strong>4 pts</strong></li>
               <li>Team Immunity 2nd Place – <strong>2 pts</strong></li>
               <li>Individual Reward Win – <strong>3 pts</strong></li>
-              <li>Team Reward Win – <strong>3 pts</strong></li>
+              <li>Team Reward Win – <strong>2 pts</strong></li>
               <li>Team Reward 2nd Place – <strong>1 pt</strong></li>
             </ul>
           </div>
