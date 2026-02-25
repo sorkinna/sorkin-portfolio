@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 type Contestant = { id: string; name: string; team: string };
-type PointEvent = { contestant_id: string; points: number; episode: number };
+type PointEvent = { contestant_id: string; points: number; episode: number; reason?: string; };
 
 export default function SurvivorFantasy() {
   const [contestants, setContestants] = useState<Contestant[]>([]);
@@ -34,11 +34,16 @@ export default function SurvivorFantasy() {
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "point_events" },
-        (payload) => setPointEvents((prev) => [...prev, payload.new])
+        (payload) => {
+          const newEvent = payload.new as PointEvent;
+          setPointEvents((prev) => [...prev, newEvent]);
+        }
       )
       .subscribe();
 
-    return () => supabase.removeChannel(channel);
+    return () => {
+      void supabase.removeChannel(channel);
+    };
   }, []);
 
   // Aggregate totals
