@@ -283,6 +283,62 @@ export default function SurvivorFantasy() {
         </div>
       </section>
 
+      {/*Scoring System Key*/}
+      <details className="mt-16 max-w-3xl mx-auto bg-[#E3DCC3] p-6 rounded-2xl shadow-md cursor-pointer">
+        <summary className="text-2xl font-bold mb-4 text-[#3E2F1C]">
+          Scoring System
+        </summary>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-[#3E2F1C] text-sm sm:text-base">
+
+          {/* Challenges */}
+          <div>
+            <h3 className="font-semibold text-lg mb-3">🏆 Challenges</h3>
+            <ul className="space-y-1">
+              <li>Individual Immunity Win – <strong>6 pts</strong></li>
+              <li>Team Immunity Win – <strong>4 pts</strong></li>
+              <li>Team Immunity 2nd Place – <strong>2 pts</strong></li>
+              <li>Individual Reward Win – <strong>3 pts</strong></li>
+              <li>Team Reward Win – <strong>3 pts</strong></li>
+              <li>Team Reward 2nd Place – <strong>1 pt</strong></li>
+            </ul>
+          </div>
+
+          {/* MILESTONES */}
+          <div>
+            <h3 className="font-semibold text-lg mb-3">🔥 Milestones</h3>
+            <ul className="space-y-1">
+              <li>Sole Survivor – <strong>15 pts</strong></li>
+              <li>Makes the Merge – <strong>5 pts</strong></li>
+              <li>Find Hidden Immunity Idol – <strong>6 pts</strong></li>
+              <li>Receive Advantage – <strong>2 pts</strong></li>
+              <li>Receive Disadvantage – <strong>-1 pt</strong></li>
+            </ul>
+          </div>
+
+          {/* Tribal */}
+          <div>
+            <h3 className="font-semibold text-lg mb-3">🗳 Tribal</h3>
+            <ul className="space-y-1">
+              <li>Vote Correctly – <strong>1 pt</strong></li>
+              <li>Vote Incorrectly – <strong>-1 pt</strong></li>
+              <li>Play Idol Correctly – <strong>10 pts</strong></li>
+              <li>Play Idol Incorrectly – <strong>-4 pts</strong></li>
+            </ul>
+          </div>
+
+          {/* Sorkin */}
+          <div>
+            <h3 className="font-semibold text-lg mb-3">😈 Sorkin Meter</h3>
+            <ul className="space-y-1">
+              <li>Good Confessional – <strong>? pts</strong></li>
+              <li>Iconic Moment – <strong>? pts</strong></li>
+              <li>Orchestrated Blindside – <strong>? pts</strong></li>
+              <li>Cringe Status – <strong>-? pts</strong></li>
+            </ul>
+          </div>
+        </div>
+      </details>
+
     </div>
   );
 }
