@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { motion, AnimatePresence } from "framer-motion";
 
 type Contestant = { id: string; name: string; team: string };
 type PointEvent = { contestant_id: string; points: number; episode: number; reason?: string; };
@@ -173,31 +174,54 @@ export default function SurvivorFantasy() {
         <h2 className="text-2xl sm:text-3xl font-bold mb-3 sm:mb-4 text-[#3E2F1C]">Recent Activity</h2>
 
         <div className="space-y-2 sm:space-y-3 max-w-2xl">
-          {pointEvents.slice(-8).reverse().map((event, idx) => {
-            const contestant = contestants.find((c) => c.id === event.contestant_id);
-            if (!contestant) return null;
-            const imgName = contestant.name.replace(/ /g, "_");
+          <AnimatePresence>
+            {pointEvents.slice(-8).reverse().map((event, idx) => {
+              const contestant = contestants.find(
+                (c) => c.id === event.contestant_id
+              );
+              if (!contestant) return null;
 
-            return (
-              <div
-                key={idx}
-                className="flex justify-between bg-[#F7F3E9] p-3 rounded-lg shadow-sm border-l-4 border-[#F29E4C]"
-              >
-                <div className="flex items-center gap-3">
-                  <img
-                    src={`/images/contestants/${imgName}.png`}
-                    alt={contestant.name}
-                    className="w-12 h-16 sm:w-14 sm:h-20 object-contain rounded-lg bg-neutral-200"
-                  />
-                  <span className="font-medium text-[#3E2F1C] text-lg">
-                    {contestant.name} ({event.points > 0 ? "+" : ""}
-                    {event.points})
+              const imgName = contestant.name.replace(/ /g, "_");
+
+              return (
+                <motion.div
+                  key={`${event.contestant_id}-${event.points}-${idx}`}
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="flex justify-between bg-[#F7F3E9] p-3 rounded-lg shadow-sm border-l-4 border-[#F29E4C]"
+                >
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={`/images/contestants/${imgName}.png`}
+                      alt={contestant.name}
+                      className="w-12 h-16 sm:w-14 sm:h-20 object-contain rounded-lg bg-neutral-200"
+                    />
+
+                    <span
+                      className={`font-medium text-lg ${
+                        event.points > 0 ? "text-green-700" : "text-red-700"
+                      }`}
+                    >
+                      <span
+                        className={`font-medium text-lg ${
+                          event.points > 0 ? "text-green-700" : "text-red-700"
+                        }`}
+                      >
+                        {contestant.name} ({event.points > 0 ? "+" : ""}
+                        {event.points})
+                      </span>
+                    </span>
+                  </div>
+
+                  <span className="text-[#3E2F1C]/80 italic text-sm">
+                    {event.reason || "No reason"}
                   </span>
-                </div>
-                <span className="text-[#3E2F1C]/80 italic text-sm">{event.reason || "No reason"}</span>
-              </div>
-            );
-          })}
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
         </div>
       </section>
 
@@ -219,7 +243,15 @@ export default function SurvivorFantasy() {
                 {/* Team Header */}
                 <div className="flex justify-between mb-4">
                   <span className="text-2xl font-bold text-[#3E2F1C]">{team}</span>
-                  <span className="text-2xl font-semibold text-[#3E2F1C]">{teamPoints} pts</span>
+                  <motion.span
+                    key={teamPoints}
+                    initial={{ scale: 1.1 }}
+                    animate={{ scale: 1 }}
+                    transition={{ duration: 0.2 }}
+                    className="text-2xl font-semibold text-[#3E2F1C]"
+                  >
+                    {teamPoints} pts
+                  </motion.span>
                 </div>
 
                 {/* Team Members */}
