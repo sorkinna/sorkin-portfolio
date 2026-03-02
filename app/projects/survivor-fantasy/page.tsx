@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { motion, AnimatePresence } from "framer-motion";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
 type Contestant = { id: string; name: string; team: string };
 type PointEvent = { contestant_id: string; points: number; episode: number; reason?: string; };
@@ -16,6 +18,9 @@ export default function SurvivorFantasy() {
   const [reason, setReason] = useState("");
   const [episode, setEpisode] = useState("");
   const [currentEpisode, setCurrentEpisode] = useState(1);
+  const searchParams = useSearchParams();
+  const [showBanner, setShowBanner] = useState(false);
+
 
 
   useEffect(() => {
@@ -46,6 +51,18 @@ export default function SurvivorFantasy() {
       void supabase.removeChannel(channel);
     };
   }, []);
+
+  useEffect(() => {
+    if (searchParams.get("submitted") === "true") {
+      setShowBanner(true);
+
+      const timer = setTimeout(() => {
+        setShowBanner(false);
+      }, 3000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [searchParams]);
 
   // Aggregate totals
   const totals: Record<string, number> = {};
@@ -83,91 +100,31 @@ export default function SurvivorFantasy() {
         Survivor Fantasy League
       </h1>
 
-      {/* Admin Toggle */}
-      <div className="flex justify-center mb-10">
-      <button
-        className="px-6 py-3 bg-[#F29E4C] text-[#3E2F1C] font-semibold rounded-xl shadow-md hover:bg-[#ffb85c] transition"
-        onClick={handleAdminToggle}
-      >
-        {isAdmin ? "Exit Admin Mode" : "Enter Admin Mode"}
-      </button>
-      </div>
-
-      {/* Admin Panel */}
-      {isAdmin && (
-        <div className="mb-12 sm:mb-16 p-4 sm:p-6 rounded-2xl bg-[#E3DCC3] shadow-lg max-w-2xl mx-auto">
-          <h2 className="text-2xl sm:text-3xl font-bold mb-3 sm:mb-4 text-[#3E2F1C]">Add Scoring Event</h2>
-
-          <div className="flex items-center gap-4 mb-4">
-            <label className="font-medium text-[#3E2F1C]">Episode:</label>
-            <input
-              type="number"
-              min={1}
-              value={currentEpisode}
-              onChange={(e) => setCurrentEpisode(parseInt(e.target.value))}
-              className="border p-2 rounded w-20 text-[#3E2F1C]"
-            />
+      {/*Banner*/}
+      {showBanner && (
+        <div className="mb-8 max-w-xl mx-auto">
+          <div className="bg-green-100 border border-green-300 text-green-800 px-4 py-3 rounded-xl shadow-md text-center animate-fade-in">
+            Submission sent for review 👌
           </div>
-
-          <form
-            className="flex flex-col gap-4"
-            onSubmit={async (e) => {
-              e.preventDefault();
-              if (!selectedContestant) return;
-              const { error } = await supabase.from("point_events").insert([
-                {
-                  contestant_id: selectedContestant,
-                  points: parseInt(points),
-                  reason,
-                  episode: currentEpisode,
-                },
-              ]);
-              if (error) alert("Error adding points: " + error.message);
-              else {
-                setPoints(""); setReason(""); setEpisode("");
-              }
-            }}
-          >
-            <select
-              className="border p-2 rounded text-[#3E2F1C]"
-              value={selectedContestant}
-              onChange={(e) => setSelectedContestant(e.target.value)}
-              required
-            >
-              <option value="">Select Contestant</option>
-              {contestants.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} ({c.team})
-                </option>
-              ))}
-            </select>
-
-            <input
-              type="number"
-              placeholder="Points (+/-)"
-              value={points}
-              onChange={(e) => setPoints(e.target.value)}
-              className="border p-2 rounded text-[#3E2F1C]"
-              required
-            />
-
-            <input
-              type="text"
-              placeholder="Reason (optional)"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              className="border p-2 rounded text-[#3E2F1C]"
-            />
-
-            <button
-              type="submit"
-              className="px-4 py-2 bg-[#F29E4C] text-[#3E2F1C] rounded-lg shadow hover:bg-[#ffb85c] transition"
-            >
-              Add Event
-            </button>
-          </form>
         </div>
       )}
+
+      {/*Page Redirects*/}
+      <div className="flex justify-end gap-3 mb-4">
+        <Link
+          href="/projects/survivor-fantasy/submit"
+          className="text-sm px-3 py-1 rounded-full bg-[#EADFC8] text-[#3E2F1C] hover:bg-[#D9C9AA] transition"
+        >
+          Submit Point Entry
+        </Link>
+
+        <Link
+          href="/projects/survivor-fantasy/admin"
+          className="text-sm px-3 py-1 rounded-full bg-[#D4B483] text-[#3E2F1C] hover:bg-[#C6A36F] transition"
+        >
+          Admin
+        </Link>
+      </div>
 
       {/* Recent Activity */}
       <section className="mb-10">
