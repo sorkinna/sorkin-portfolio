@@ -19,10 +19,21 @@ export default function SurvivorFantasy() {
   const [reason, setReason] = useState("");
   const [episode, setEpisode] = useState("");
   const [currentEpisode, setCurrentEpisode] = useState(1);
-  const searchParams = useSearchParams();
   const [showBanner, setShowBanner] = useState(false);
+  const [searchSubmitted, setSearchSubmitted] = useState(false);
 
 
+  useEffect(() => {
+    // only run this in the browser
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("submitted") === "true") {
+      setShowBanner(true);
+      setSearchSubmitted(true);
+
+      const timer = setTimeout(() => setShowBanner(false), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, []);
 
   useEffect(() => {
     async function fetchData() {
@@ -53,18 +64,6 @@ export default function SurvivorFantasy() {
       void supabase.removeChannel(channel);
     };
   }, []);
-
-  useEffect(() => {
-    if (searchParams.get("submitted") === "true") {
-      setShowBanner(true);
-
-      const timer = setTimeout(() => {
-        setShowBanner(false);
-      }, 3000);
-
-      return () => clearTimeout(timer);
-    }
-  }, [searchParams]);
 
   // Aggregate totals
   const totals: Record<string, number> = {};
@@ -143,6 +142,7 @@ export default function SurvivorFantasy() {
                     <img
                       src={`/images/contestants/${imgName}.png`}
                       alt={contestant.name}
+                      onError={(e) => { (e.target as HTMLImageElement).src = '/images/placeholder.png'; }}
                       className="w-12 h-16 sm:w-14 sm:h-20 object-contain rounded-lg bg-neutral-200"
                     />
 
@@ -215,6 +215,7 @@ export default function SurvivorFantasy() {
                           <img
                             src={`/images/contestants/${imgName}.png`}
                             alt={member.name}
+                            onError={(e) => { (e.target as HTMLImageElement).src = '/images/placeholder.png'; }}
                             className="w-14 h-20 sm:w-16 sm:h-24 object-contain rounded-lg bg-neutral-200"
                           />
                           <span className="text-[#3E2F1C] text-lg font-medium">{member.name}</span>
