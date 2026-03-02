@@ -10,6 +10,7 @@ type Contestant = {
   id: string;
   name: string;
   team: string;
+  eliminated: boolean;
 };
 
 export default function SubmitPage() {
@@ -91,7 +92,7 @@ export default function SubmitPage() {
           className="w-full border p-2 rounded"
         >
           <option value="">Select Contestant</option>
-          {contestants.map((c) => (
+          {contestants.filter((c) => !c.eliminated).map((c) => (
             <option key={c.id} value={c.id}>
               {c.name} ({c.team})
             </option>
@@ -103,7 +104,7 @@ export default function SubmitPage() {
           type="number"
           placeholder="Points (+/-)"
           value={points}
-          className="w-full border p-2 rounded"
+          className="bg-white text-base text-[#3E2F1C] placeholder:text-[#3E2F1C]/60 border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
           onChange={(e) =>
             setPoints(e.target.value === "" ? "" : Number(e.target.value))
           }
@@ -113,7 +114,7 @@ export default function SubmitPage() {
         <input
           placeholder="Reason"
           value={reason}
-          className="w-full border p-2 rounded"
+          className="bg-white text-base text-[#3E2F1C] placeholder:text-[#3E2F1C]/60 border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
           onChange={(e) => setReason(e.target.value)}
         />
 

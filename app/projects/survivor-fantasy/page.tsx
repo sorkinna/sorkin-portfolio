@@ -5,20 +5,13 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 
-type Contestant = { id: string; name: string; team: string };
+type Contestant = { id: string; name: string; team: string; eliminated: boolean; };
 type PointEvent = { contestant_id: string; points: number; episode: number; reason?: string; };
 
 export default function SurvivorFantasy() {
   const [contestants, setContestants] = useState<Contestant[]>([]);
   const [pointEvents, setPointEvents] = useState<PointEvent[]>([]);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [selectedContestant, setSelectedContestant] = useState("");
-  const [points, setPoints] = useState("");
-  const [reason, setReason] = useState("");
-  const [episode, setEpisode] = useState("");
-  const [currentEpisode, setCurrentEpisode] = useState(1);
   const [showBanner, setShowBanner] = useState(false);
   const [searchSubmitted, setSearchSubmitted] = useState(false);
 
@@ -218,7 +211,7 @@ export default function SurvivorFantasy() {
                             onError={(e) => { (e.target as HTMLImageElement).src = '/images/placeholder.png'; }}
                             className="w-14 h-20 sm:w-16 sm:h-24 object-contain rounded-lg bg-neutral-200"
                           />
-                          <span className="text-[#3E2F1C] text-lg font-medium">{member.name}</span>
+                          <span className={`text-lg font-medium ${member.eliminated ? "text-red-600 line-through opacity-70": "text-[#3E2F1C]"}`}>{member.name}</span>
                         </div>
                         <span className="text-[#3E2F1C]/90 text-lg font-semibold">{member.points} pts</span>
                       </div>

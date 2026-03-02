@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 
-type Contestant = { id: string; name: string; team: string };
+type Contestant = { id: string; name: string; team: string; eliminated: boolean; };
 type PendingSubmission = {
   id: string;
   contestant_id: string;
@@ -31,6 +31,28 @@ export default function AdminPage() {
     } else {
       alert("Incorrect password!");
     }
+  };
+
+  //toggle eliminated player
+  const toggleElimination = async (contestant: Contestant) => {
+    const { error } = await supabase
+      .from("contestants")
+      .update({ eliminated: !contestant.eliminated })
+      .eq("id", contestant.id);
+
+    if (error) {
+      console.error("Error updating elimination:", error);
+      return;
+    }
+
+    // Update local state immediately for instant UI feedback
+    setContestants((prev) =>
+      prev.map((c) =>
+        c.id === contestant.id
+          ? { ...c, eliminated: !contestant.eliminated }
+          : c
+      )
+    );
   };
 
   useEffect(() => {
@@ -139,7 +161,7 @@ export default function AdminPage() {
               placeholder="Enter admin password"
               value={passwordInput}
               onChange={(e) => setPasswordInput(e.target.value)}
-              className="border p-2 rounded"
+              className="bg-white text-[#3E2F1C] placeholder:text-[#3E2F1C]/60 border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
             />
             <button
               type="submit"
@@ -173,7 +195,7 @@ export default function AdminPage() {
           min={1}
           value={currentEpisode}
           onChange={(e) => setCurrentEpisode(parseInt(e.target.value))}
-          className="border p-2 rounded w-20"
+          className="bg-white text-[#3E2F1C] placeholder:text-[#3E2F1C]/60 border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
         />
         <button
           onClick={updateEpisode}
@@ -192,7 +214,7 @@ export default function AdminPage() {
           className="w-full border p-2 rounded"
         >
           <option value="">Select Contestant</option>
-          {contestants.map((c) => (
+          {contestants.filter((c) => !c.eliminated).map((c) => (
             <option key={c.id} value={c.id}>
               {c.name} ({c.team})
             </option>
@@ -202,14 +224,14 @@ export default function AdminPage() {
           type="number"
           placeholder="Points (+/-)"
           value={points}
-          className="w-full border p-2 rounded"
+          className="bg-white text-[#3E2F1C] placeholder:text-[#3E2F1C]/60 border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
           onChange={(e) => setPoints(e.target.value)}
         />
         <input
           type="text"
           placeholder="Reason (optional)"
           value={reason}
-          className="w-full border p-2 rounded"
+          className="bg-white text-[#3E2F1C] placeholder:text-[#3E2F1C]/60 border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
           onChange={(e) => setReason(e.target.value)}
         />
         <button
@@ -259,6 +281,31 @@ export default function AdminPage() {
           })}
         </div>
       </div>
+      {contestants.map((c) => (
+        <div
+          key={c.id}
+          className="flex items-center justify-between bg-[#F7F3E9] p-3 rounded-lg shadow-sm"
+        >
+          <span
+            className={`font-medium ${
+              c.eliminated ? "text-red-600 line-through opacity-70" : ""
+            }`}
+          >
+            {c.name}
+          </span>
+
+          <button
+            onClick={() => toggleElimination(c)}
+            className={`px-3 py-1 text-sm rounded-full transition ${
+              c.eliminated
+                ? "bg-green-200 hover:bg-green-300"
+                : "bg-red-200 hover:bg-red-300"
+            }`}
+          >
+            {c.eliminated ? "Reinstate" : "Eliminate"}
+          </button>
+        </div>
+      ))}
     </div>
   );
 }
