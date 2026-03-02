@@ -81,69 +81,70 @@ export default function SubmitPage() {
   return (
     <div className="min-h-screen bg-[#F4EFE6] p-6 flex justify-center">
       <div className="bg-white p-6 rounded-2xl shadow-md w-full max-w-md space-y-4">
-        <h1 className="text-xl font-semibold text-[#3E2F1C]">
-          Submit Scoring Suggestion
-        </h1>
+        <div className="flex flex-col gap-4">
+          <h1 className="text-xl font-semibold text-[#3E2F1C]">
+            Submit Scoring Suggestion
+          </h1>
 
-        {/* Contestant Dropdown */}
-        <select
-          value={contestantId}
-          onChange={(e) => setContestantId(e.target.value)}
-          className="bg-white text-base text-[#3E2F1C] placeholder:text-[#3E2F1C]/60 border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
-        >
-          <option value="">Select Contestant</option>
-          {contestants.filter((c) => !c.eliminated).map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name} ({c.team})
-            </option>
-          ))}
-        </select>
+          {/* Contestant Dropdown */}
+          <select
+            value={contestantId}
+            onChange={(e) => setContestantId(e.target.value)}
+            className="bg-white text-base text-[#3E2F1C] placeholder:text-[#3E2F1C]/60 border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
+          >
+            <option value="">Select Contestant</option>
+            {contestants.filter((c) => !c.eliminated).map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name} ({c.team})
+              </option>
+            ))}
+          </select>
 
-        {/* Points */}
-        <input
-          type="number"
-          placeholder="Points (+/-)"
-          value={points}
-          className="bg-white text-base text-[#3E2F1C] placeholder:text-[#3E2F1C]/60 border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
-          onChange={(e) =>
-            setPoints(e.target.value === "" ? "" : Number(e.target.value))
-          }
-        />
+          {/* Points */}
+          <input
+            type="number"
+            placeholder="Points (+/-)"
+            value={points}
+            className="bg-white text-base text-[#3E2F1C] placeholder:text-[#3E2F1C]/60 border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
+            onChange={(e) =>
+              setPoints(e.target.value === "" ? "" : Number(e.target.value))
+            }
+          />
 
-        {/* Reason */}
-        <input
-          placeholder="Reason"
-          value={reason}
-          className="bg-white text-base text-[#3E2F1C] placeholder:text-[#3E2F1C]/60 border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
-          onChange={(e) => setReason(e.target.value)}
-        />
+          {/* Reason */}
+          <input
+            placeholder="Reason"
+            value={reason}
+            className="bg-white text-base text-[#3E2F1C] placeholder:text-[#3E2F1C]/60 border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
+            onChange={(e) => setReason(e.target.value)}
+          />
 
-        {/* Team Dropdown */}
-        <select
-          value={team}
-          onChange={(e) => setTeam(e.target.value)}
-          className="bg-white text-base text-[#3E2F1C] placeholder:text-[#3E2F1C]/60 border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
-        >
-          <option value="">Your Team</option>
-          {teams.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
+          {/* Team Dropdown */}
+          <select
+            value={team}
+            onChange={(e) => setTeam(e.target.value)}
+            className="bg-white text-base text-[#3E2F1C] placeholder:text-[#3E2F1C]/60 border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
+          >
+            <option value="">Your Team</option>
+            {teams.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
 
-        {/* Submit Button */}
-        <button
-          onClick={handleSubmit}
-          className="w-full bg-[#F29E4C] text-white py-2 rounded-lg hover:bg-[#ffb85c] transition"
-        >
-          Submit
-        </button>
-
+          {/* Submit Button */}
+          <button
+            onClick={handleSubmit}
+            className="w-full bg-[#F29E4C] text-white py-2 rounded-lg hover:bg-[#ffb85c] transition"
+          >
+            Submit
+          </button>
+        </div>
         {/* Back Button */}
         <Link
           href="/projects/survivor-fantasy"
-          className="block text-center text-sm text-neutral-600 hover:text-black transition pt-2"
+          className="block text-center text-sm text-[#3E2F1C]/80 hover:text-[#3E2F1C] transition pt-2"
         >
           ← Back to Fantasy Tracker
         </Link>

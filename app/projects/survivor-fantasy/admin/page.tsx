@@ -207,39 +207,41 @@ export default function AdminPage() {
 
       {/* Admin Point Entry */}
       <div className="mb-8 p-4 bg-[#E3DCC3] rounded-xl shadow max-w-md space-y-4">
-        <h2 className="text-2xl font-semibold text-[#3E2F1C]">Add Points Manually</h2>
-        <select
-          value={selectedContestant}
-          onChange={(e) => setSelectedContestant(e.target.value)}
-          className="bg-white text-base text-[#3E2F1C] placeholder:text-[#3E2F1C]/60 border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
-        >
-          <option value="">Select Contestant</option>
-          {contestants.filter((c) => !c.eliminated).map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name} ({c.team})
-            </option>
-          ))}
-        </select>
-        <input
-          type="number"
-          placeholder="Points (+/-)"
-          value={points}
-          className="bg-white text-base text-[#3E2F1C] placeholder:text-[#3E2F1C]/60 border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
-          onChange={(e) => setPoints(e.target.value)}
-        />
-        <input
-          type="text"
-          placeholder="Reason (optional)"
-          value={reason}
-          className="bg-white text-base text-[#3E2F1C] placeholder:text-[#3E2F1C]/60 border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
-          onChange={(e) => setReason(e.target.value)}
-        />
-        <button
-          onClick={addPoints}
-          className="w-full px-4 py-2 bg-[#F29E4C] text-[#3E2F1C] rounded-lg hover:bg-[#ffb85c] transition"
-        >
-          Add Points
-        </button>
+        <div className="flex flex-col gap-4">
+          <h2 className="text-2xl font-semibold text-[#3E2F1C]">Add Points Manually</h2>
+          <select
+            value={selectedContestant}
+            onChange={(e) => setSelectedContestant(e.target.value)}
+            className="bg-white text-base text-[#3E2F1C] placeholder:text-[#3E2F1C]/60 border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
+          >
+            <option value="">Select Contestant</option>
+            {contestants.filter((c) => !c.eliminated).map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name} ({c.team})
+              </option>
+            ))}
+          </select>
+          <input
+            type="number"
+            placeholder="Points (+/-)"
+            value={points}
+            className="bg-white text-base text-[#3E2F1C] placeholder:text-[#3E2F1C]/60 border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
+            onChange={(e) => setPoints(e.target.value)}
+          />
+          <input
+            type="text"
+            placeholder="Reason (optional)"
+            value={reason}
+            className="bg-white text-base text-[#3E2F1C] placeholder:text-[#3E2F1C]/60 border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
+            onChange={(e) => setReason(e.target.value)}
+          />
+          <button
+            onClick={addPoints}
+            className="w-full px-4 py-2 bg-[#F29E4C] text-[#3E2F1C] rounded-lg hover:bg-[#ffb85c] transition"
+          >
+            Add Points
+          </button>
+        </div>
       </div>
 
       {/* Pending Submissions */}
@@ -281,13 +283,15 @@ export default function AdminPage() {
           })}
         </div>
       </div>
+
+      {/*Eliminated List*/}
       {contestants.map((c) => (
         <div
           key={c.id}
           className="flex items-center justify-between bg-[#F7F3E9] p-3 rounded-lg shadow-sm"
         >
           <span
-            className={`font-medium ${
+            className={`font-medium text-[#3E2F1C] ${
               c.eliminated ? "text-red-600 line-through opacity-70" : ""
             }`}
           >
