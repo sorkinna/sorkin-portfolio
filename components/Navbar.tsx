@@ -8,7 +8,7 @@ export default function Navbar() {
         {/* Brand */}
         <Link
           href="/"
-          className="text-base sm:text-lg font-semibold tracking-tight whitespace-nowrap"
+          className="text-base sm:text-lg font-semibold tracking-tight whitespace-nowrap text-[#3E2F1C]/80"
         >
           Nick Sorkin
         </Link>

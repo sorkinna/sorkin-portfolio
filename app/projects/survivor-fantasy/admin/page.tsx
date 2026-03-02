@@ -161,7 +161,7 @@ export default function AdminPage() {
               placeholder="Enter admin password"
               value={passwordInput}
               onChange={(e) => setPasswordInput(e.target.value)}
-              className="bg-white text-[#3E2F1C] placeholder:text-[#3E2F1C]/60 border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
+              className="bg-white text-base text-[#3E2F1C] placeholder:text-[#3E2F1C]/60 border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
             />
             <button
               type="submit"
@@ -195,7 +195,7 @@ export default function AdminPage() {
           min={1}
           value={currentEpisode}
           onChange={(e) => setCurrentEpisode(parseInt(e.target.value))}
-          className="bg-white text-[#3E2F1C] placeholder:text-[#3E2F1C]/60 border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
+          className="bg-white text-base text-[#3E2F1C] placeholder:text-[#3E2F1C]/60 border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
         />
         <button
           onClick={updateEpisode}
@@ -211,7 +211,7 @@ export default function AdminPage() {
         <select
           value={selectedContestant}
           onChange={(e) => setSelectedContestant(e.target.value)}
-          className="w-full border p-2 rounded"
+          className="bg-white text-base text-[#3E2F1C] placeholder:text-[#3E2F1C]/60 border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
         >
           <option value="">Select Contestant</option>
           {contestants.filter((c) => !c.eliminated).map((c) => (
@@ -224,14 +224,14 @@ export default function AdminPage() {
           type="number"
           placeholder="Points (+/-)"
           value={points}
-          className="bg-white text-[#3E2F1C] placeholder:text-[#3E2F1C]/60 border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
+          className="bg-white text-base text-[#3E2F1C] placeholder:text-[#3E2F1C]/60 border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
           onChange={(e) => setPoints(e.target.value)}
         />
         <input
           type="text"
           placeholder="Reason (optional)"
           value={reason}
-          className="bg-white text-[#3E2F1C] placeholder:text-[#3E2F1C]/60 border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
+          className="bg-white text-base text-[#3E2F1C] placeholder:text-[#3E2F1C]/60 border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
           onChange={(e) => setReason(e.target.value)}
         />
         <button

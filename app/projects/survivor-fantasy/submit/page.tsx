@@ -89,7 +89,7 @@ export default function SubmitPage() {
         <select
           value={contestantId}
           onChange={(e) => setContestantId(e.target.value)}
-          className="w-full border p-2 rounded"
+          className="bg-white text-base text-[#3E2F1C] placeholder:text-[#3E2F1C]/60 border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
         >
           <option value="">Select Contestant</option>
           {contestants.filter((c) => !c.eliminated).map((c) => (
@@ -122,7 +122,7 @@ export default function SubmitPage() {
         <select
           value={team}
           onChange={(e) => setTeam(e.target.value)}
-          className="w-full border p-2 rounded"
+          className="bg-white text-base text-[#3E2F1C] placeholder:text-[#3E2F1C]/60 border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
         >
           <option value="">Your Team</option>
           {teams.map((t) => (
