@@ -42,6 +42,7 @@ export default function SurvivorFantasy() {
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "point_events" },
         (payload) => {
+          if (!payload || !payload.new) return;
           const newEvent = payload.new as PointEvent;
           setPointEvents((prev) => [...prev, newEvent]);
         }
@@ -80,18 +81,6 @@ export default function SurvivorFantasy() {
   contestantsWithPoints.forEach((c) => {
     teamTotals[c.team] = (teamTotals[c.team] || 0) + c.points;
   });
-        const handleAdminToggle = () => {
-        if (!isAdmin) {
-          const input = prompt("Enter admin key:");
-          if (input === process.env.NEXT_PUBLIC_ADMIN_KEY) {
-            setIsAdmin(true);
-          } else {
-            alert("Incorrect key!");
-          }
-        } else {
-          setIsAdmin(false);
-        }
-      };
 
   const sortedTeams = Object.entries(teamTotals).sort((a, b) => b[1] - a[1]);
 
