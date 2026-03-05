@@ -46,6 +46,24 @@ export default function Projects() {
             Live scoring dashboard for tracking fantasy league performance.
           </p>
         </Link>
+
+        {/* VILR */}
+        <Link
+          href="/projects/vilr"
+          className="group p-8 border border-neutral-200 rounded-xl hover:shadow-md transition"
+        >
+          <div className="mb-4 inline-flex items-center justify-center w-12 h-12 rounded-lg bg-neutral-100 group-hover:bg-neutral-200 transition">
+            <Trophy className="w-6 h-6 text-neutral-700" />
+          </div>
+
+          <h2 className="text-2xl font-medium mb-3 group-hover:underline">
+            Virginia Insurance Law Repository
+          </h2>
+
+          <p className="text-neutral-500">
+            Repository of Virginia Bureau of Insurance administrative letters, administrative orders, and market conduct examination reports.
+          </p>
+        </Link>
       </div>
     </div>
   );
