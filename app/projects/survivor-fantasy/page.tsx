@@ -7,13 +7,15 @@ import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 
 type Contestant = { id: string; name: string; team: string; eliminated: boolean; };
-type PointEvent = { contestant_id: string; points: number; episode: number; reason?: string; };
+type PointEvent = { contestant_id: string; points: number; episode: number; reason?: string; created_at: string; };
 
 export default function SurvivorFantasy() {
   const [contestants, setContestants] = useState<Contestant[]>([]);
   const [pointEvents, setPointEvents] = useState<PointEvent[]>([]);
   const [showBanner, setShowBanner] = useState(false);
   const [searchSubmitted, setSearchSubmitted] = useState(false);
+  const [selectedContestant, setSelectedContestant] = useState<Contestant | null>(null);
+  const [contestantEvents, setContestantEvents] = useState<PointEvent[]>([]);
 
 
   useEffect(() => {
@@ -75,6 +77,49 @@ export default function SurvivorFantasy() {
   });
 
   const sortedTeams = Object.entries(teamTotals).sort((a, b) => b[1] - a[1]);
+
+  const openContestantHistory = (contestant: Contestant) => {
+    setSelectedContestant(contestant);
+
+    const events = pointEvents
+      .filter((e) => e.contestant_id === contestant.id)
+      .sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() -
+          new Date(a.created_at).getTime()
+      )
+      .slice(0, 10);
+
+    setContestantEvents(events);
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setSelectedContestant(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
+  const selectedContestantPoints = selectedContestant
+    ? pointEvents
+        .filter((e) => e.contestant_id === selectedContestant.id)
+        .reduce((sum, e) => sum + e.points, 0)
+    : 0;
+
+  const groupedEvents = contestantEvents.reduce((groups: Record<number, PointEvent[]>, event) => {
+    if (!groups[event.episode]) {
+      groups[event.episode] = [];
+    }
+    groups[event.episode].push(event);
+    return groups;
+  }, {});
 
   return (
     <div className="min-h-screen px-4 sm:px-6 py-12 sm:py-20 max-w-6xl mx-auto bg-[#F7F3E9]">
@@ -199,22 +244,27 @@ export default function SurvivorFantasy() {
                   {teamMembers.map((member) => {
                     const imgName = member.name.replace(/ /g, "_");
                     return (
-                      <div
+                      <button
                         key={member.id}
-                        className="flex items-center justify-between bg-[#F7F3E9] rounded-lg p-2 sm:p-3 shadow-sm"
+                        onClick={() => openContestantHistory(member)}
+                        className="flex items-center justify-between bg-[#F7F3E9] rounded-lg p-2 sm:p-3 shadow-sm w-full hover:bg-[#EFE7D3] transition"
                       >
                         <div className="flex items-center gap-3">
-                          {/* Rectangular image instead of cropped circle */}
                           <img
                             src={`/images/contestants/${imgName}.png`}
                             alt={member.name}
                             onError={(e) => { (e.target as HTMLImageElement).src = '/images/placeholder.png'; }}
                             className="w-14 h-20 sm:w-16 sm:h-24 object-contain rounded-lg bg-neutral-200"
                           />
-                          <span className={`text-lg font-medium ${member.eliminated ? "text-red-600 line-through opacity-70": "text-[#3E2F1C]"}`}>{member.name}</span>
+                          <span className={`text-lg font-medium ${member.eliminated ? "text-red-600 line-through opacity-70": "text-[#3E2F1C]"}`}>
+                            {member.name}
+                          </span>
                         </div>
-                        <span className="text-[#3E2F1C]/90 text-lg font-semibold">{member.points} pts</span>
-                      </div>
+
+                        <span className="text-[#3E2F1C]/90 text-lg font-semibold">
+                          {member.points} pts
+                        </span>
+                      </button>
                     );
                   })}
                 </div>
@@ -279,7 +329,91 @@ export default function SurvivorFantasy() {
           </div>
         </div>
       </details>
+      {/* Modal for showing survivor contestant recent points */}
+      {selectedContestant && (
+        <div
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+          onClick={() => setSelectedContestant(null)}
+        >
+          <div
+            className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-4 mb-4">
 
+              {(() => {
+                const imgName = selectedContestant.name.replace(/ /g, "_");
+                return (
+                  <img
+                    src={`/images/contestants/${imgName}.png`}
+                    alt={selectedContestant.name}
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = "/images/placeholder.png";
+                    }}
+                    className="w-16 h-24 object-contain rounded-lg bg-neutral-200"
+                  />
+                );
+              })()}
+
+              <div className="flex-1">
+                <h2 className="text-xl font-semibold text-[#3E2F1C]">
+                  {selectedContestant.name}
+                </h2>
+
+                <p className="text-sm text-[#3E2F1C]/70">
+                  {selectedContestantPoints} total points
+                </p>
+              </div>
+
+              <button
+                onClick={() => setSelectedContestant(null)}
+                className="text-lg text-gray-500 hover:text-black"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-2 max-h-[400px] overflow-y-auto">
+
+              {contestantEvents.length === 0 && (
+                <p className="text-sm text-gray-500">No scoring events yet.</p>
+              )}
+
+              {Object.entries(groupedEvents).sort((a, b) => Number(b[0]) - Number(a[0])).map(([episode, events]) => (
+                <div key={episode} className="mb-3">
+
+                  <h3 className="text-sm font-semibold text-[#3E2F1C]/70 mb-1">
+                    Episode {episode} -  {events.reduce((sum, e) => sum + e.points, 0)} pts
+                  </h3>
+
+                  <div className="space-y-2">
+                    {events.map((event, i) => (
+                      <div
+                        key={i}
+                        className="flex justify-between bg-[#F7F3E9] p-2 rounded-lg"
+                      >
+                        <span className="text-[#3E2F1C] text-sm">
+                          {event.reason || "No reason"}
+                        </span>
+
+                        <span
+                          className={`font-semibold ${
+                            event.points > 0 ? "text-green-600" : "text-red-600"
+                          }`}
+                        >
+                          {event.points > 0 ? "+" : ""}
+                          {event.points}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
