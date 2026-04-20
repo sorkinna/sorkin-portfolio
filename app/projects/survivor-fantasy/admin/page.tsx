@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 
-type Contestant = { id: string; name: string; team: string; eliminated: boolean; };
+type Contestant = { id: string; name: string; team: string; eliminated: boolean; immunity_weight: number;};
 type PendingSubmission = {
   id: string;
   contestant_id: string;
@@ -23,6 +23,8 @@ export default function AdminPage() {
   const [currentEpisode, setCurrentEpisode] = useState(1);
   const [isAdmin, setIsAdmin] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
+  const [immunityWinner, setImmunityWinner] = useState("");
+  const [eliminatedPlayer, setEliminatedPlayer] = useState("");
 
   // Function to handle login
   const handleLogin = () => {
@@ -136,6 +138,76 @@ export default function AdminPage() {
     setPendingSubmissions((prev) => prev.filter((s) => s.id !== submission.id));
   };
 
+  // Handle prediction calculator
+  const gradePredictions = async () => {
+    if (!immunityWinner || !eliminatedPlayer) {
+      alert("Select results first");
+      return;
+    }
+
+    // Prevent duplicate grading
+    const { data: existing } = await supabase
+      .from("point_events")
+      .select("id")
+      .eq("episode", currentEpisode)
+      .eq("type", "team")
+      .eq("reason", "Prediction Bonus")
+      .limit(1);
+
+    if (existing && existing.length > 0) {
+      alert("Already graded for this episode");
+      return;
+    }
+
+    // Get predictions
+    const { data: predictions } = await supabase
+      .from("predictions")
+      .select("*")
+      .eq("episode", currentEpisode);
+
+    if (!predictions) return;
+
+    const eventsToInsert: any[] = [];
+
+    predictions.forEach((p) => {
+      let points = 0;
+
+      // Immunity = weighted at time of prediction
+      if (p.immunity_pick === immunityWinner) {
+        points += p.immunity_weight ?? 0;
+      }
+
+      // Eliminated = fixed value (or make configurable later)
+      if (p.eliminated_pick === eliminatedPlayer) {
+        points += 5;
+      }
+
+      if (points === 0) return;
+
+      eventsToInsert.push({
+        team: p.team,
+        points,
+        reason: "Prediction Bonus",
+        episode: currentEpisode,
+        type: "team", // 👈 key addition
+        contestant_id: null,
+      });
+    });
+
+    if (eventsToInsert.length > 0) {
+      await supabase.from("point_events").insert(eventsToInsert);
+    }
+
+    // Save official results
+    await supabase.from("episode_results").upsert({
+      episode: currentEpisode,
+      immunity_winner: immunityWinner,
+      eliminated_player: eliminatedPlayer,
+    });
+
+    alert("Predictions graded correctly!");
+  };
+
   // Update episode in settings
   const updateEpisode = async () => {
     await supabase
@@ -245,7 +317,7 @@ export default function AdminPage() {
       </div>
 
       {/* Pending Submissions */}
-      <div className="p-4 bg-[#E3DCC3] rounded-xl shadow max-w-3xl">
+      <div className="mb-8 p-4 bg-[#E3DCC3] rounded-xl shadow max-w-3xl">
         <h2 className="text-2xl font-semibold text-[#3E2F1C] mb-4">Pending Submissions</h2>
         <div className="space-y-3">
           {pendingSubmissions.map((sub) => {
@@ -284,32 +356,118 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/*Eliminated List*/}
-      {contestants.map((c) => (
-        <div
-          key={c.id}
-          className="flex items-center justify-between bg-[#F7F3E9] p-3 rounded-lg shadow-sm"
-        >
-          <span
-            className={`font-medium text-[#3E2F1C] ${
-              c.eliminated ? "text-red-600 line-through opacity-70" : ""
-            }`}
-          >
-            {c.name}
-          </span>
+      {/*Submit Episode Recap*/}
+      <div className="mb-8 p-4 bg-[#E3DCC3] rounded-xl shadow max-w-md space-y-4">
+        <h2 className="text-2xl font-semibold text-[#3E2F1C]">
+          Submit Episode Results
+        </h2>
 
-          <button
-            onClick={() => toggleElimination(c)}
-            className={`px-3 py-1 text-sm rounded-full transition ${
-              c.eliminated
-                ? "bg-green-200 hover:bg-green-300"
-                : "bg-red-200 hover:bg-red-300"
-            }`}
-          >
-            {c.eliminated ? "Reinstate" : "Eliminate"}
-          </button>
+        {/* Immunity Winner */}
+        <select
+          value={immunityWinner}
+          onChange={(e) => setImmunityWinner(e.target.value)}
+          className="w-full border p-2 rounded"
+        >
+          <option value="">Select Immunity Winner</option>
+          {contestants
+            .filter((c) => !c.eliminated)
+            .map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+        </select>
+
+        {/* Eliminated Player */}
+        <select
+          value={eliminatedPlayer}
+          onChange={(e) => setEliminatedPlayer(e.target.value)}
+          className="w-full border p-2 rounded"
+        >
+          <option value="">Select Eliminated Player</option>
+          {contestants
+            .filter((c) => !c.eliminated)
+            .map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+        </select>
+
+        <button
+          onClick={gradePredictions}
+          className="w-full px-4 py-2 bg-[#F29E4C] text-[#3E2F1C] rounded-lg hover:bg-[#ffb85c] transition"
+        >
+          Submit Results & Grade Predictions
+        </button>
+      </div>
+
+
+      {/* Contestant Management */}
+      <div className="mt-10 bg-[#E3DCC3] p-4 rounded-xl shadow max-w-4xl">
+        <h2 className="text-2xl font-semibold text-[#3E2F1C] mb-4">
+          Contestant Management
+        </h2>
+
+        <div className="space-y-2">
+          {contestants.sort((a,b)=>Number(a.eliminated) - Number(b.eliminated)).map((c) => (
+            <div
+              key={c.id}
+              className="grid grid-cols-1 sm:grid-cols-3 items-center gap-3 bg-[#F7F3E9] p-3 rounded-lg shadow-sm"
+            >
+              {/* Name */}
+              <div className="font-medium text-[#3E2F1C]">
+                <span className={c.eliminated ? "line-through text-red-600 opacity-70" : ""}>
+                  {c.name}
+                </span>
+              </div>
+
+              {/* Immunity Weight */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-[#3E2F1C]/70 whitespace-nowrap">
+                  Weight:
+                </span>
+
+                <input
+                  type="number"
+                  min={1}
+                  max={15}
+                  value={c.immunity_weight ?? 5}
+                  onChange={async (e) => {
+                    const newWeight = Number(e.target.value);
+
+                    await supabase
+                      .from("contestants")
+                      .update({ immunity_weight: newWeight })
+                      .eq("id", c.id);
+
+                    setContestants((prev) =>
+                      prev.map((x) =>
+                        x.id === c.id ? { ...x, immunity_weight: newWeight } : x
+                      )
+                    );
+                  }}
+                  className="w-20 border border-[#3E2F1C]/30 rounded-lg px-2 py-1 text-center bg-white text-[#3E2F1C]"
+                />
+              </div>
+
+              {/* Eliminate Button */}
+              <div className="flex justify-start sm:justify-end">
+                <button
+                  onClick={() => toggleElimination(c)}
+                  className={`px-4 py-1 rounded-full text-sm transition ${
+                    c.eliminated
+                      ? "bg-green-200 hover:bg-green-300 text-[#3E2F1C]"
+                      : "bg-red-200 hover:bg-red-300 text-[#3E2F1C]"
+                  }`}
+                >
+                  {c.eliminated ? "Reinstate" : "Eliminate"}
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
-      ))}
+      </div>
     </div>
   );
 }

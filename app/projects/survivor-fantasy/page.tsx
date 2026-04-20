@@ -7,25 +7,35 @@ import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 
 type Contestant = { id: string; name: string; team: string; eliminated: boolean; };
-type PointEvent = { contestant_id: string; points: number; episode: number; reason?: string; created_at: string; };
+type PointEvent = { contestant_id: string; points: number; episode: number; reason?: string; created_at: string; team: string; type: string;};
 
 export default function SurvivorFantasy() {
   const [contestants, setContestants] = useState<Contestant[]>([]);
   const [pointEvents, setPointEvents] = useState<PointEvent[]>([]);
-  const [showBanner, setShowBanner] = useState(false);
+  const [showBannerS, setShowBannerS] = useState(false);
+  const [showBannerP, setShowBannerP] = useState(false);
   const [searchSubmitted, setSearchSubmitted] = useState(false);
   const [selectedContestant, setSelectedContestant] = useState<Contestant | null>(null);
   const [contestantEvents, setContestantEvents] = useState<PointEvent[]>([]);
+  const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
+  const [teamPredictions, setTeamPredictions] = useState<any[]>([]);
+  const [episodeResults, setEpisodeResults] = useState<any[]>([]);
 
 
   useEffect(() => {
     // only run this in the browser
     const params = new URLSearchParams(window.location.search);
     if (params.get("submitted") === "true") {
-      setShowBanner(true);
+      setShowBannerS(true);
       setSearchSubmitted(true);
 
-      const timer = setTimeout(() => setShowBanner(false), 3000);
+      const timer = setTimeout(() => setShowBannerS(false), 3000);
+      return () => clearTimeout(timer);
+    }
+    if (params.get("predicted") === "true") {
+      setShowBannerP(true);
+
+      const timer = setTimeout(() => setShowBannerP(false), 3000);
       return () => clearTimeout(timer);
     }
   }, []);
@@ -72,9 +82,17 @@ export default function SurvivorFantasy() {
   }));
 
   const teamTotals: Record<string, number> = {};
+  //1. Contestant points
   contestantsWithPoints.forEach((c) => {
     teamTotals[c.team] = (teamTotals[c.team] || 0) + c.points;
   });
+
+  // 2. team-based events (prediction bonuses)
+  pointEvents
+    .filter((e) => e.type === "team" && e.team)
+    .forEach((e) => {
+      teamTotals[e.team!] = (teamTotals[e.team!] || 0) + e.points;
+    });
 
   const sortedTeams = Object.entries(teamTotals).sort((a, b) => b[1] - a[1]);
 
@@ -88,10 +106,33 @@ export default function SurvivorFantasy() {
           new Date(b.created_at).getTime() -
           new Date(a.created_at).getTime()
       )
-      .slice(0, 10);
+      .slice(0, 50);
 
     setContestantEvents(events);
   };
+
+  //Open team history
+  const openTeamModal = async (team: string) => {
+    setSelectedTeam(team);
+
+    const { data: predictionsData } = await supabase
+      .from("predictions")
+      .select("*")
+      .eq("team", team)
+      .order("episode", { ascending: false });
+
+    const { data: resultsData } = await supabase
+      .from("episode_results")
+      .select("*");
+
+    if (predictionsData) setTeamPredictions(predictionsData);
+    if (resultsData) setEpisodeResults(resultsData);
+  };
+
+  const resultsMap = episodeResults.reduce((acc, r) => {
+    acc[r.episode] = r;
+    return acc;
+  }, {} as Record<number, any>);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -128,7 +169,7 @@ export default function SurvivorFantasy() {
       </h1>
 
       {/*Banner*/}
-      {showBanner && (
+      {showBannerS && (
         <div className="mb-8 max-w-xl mx-auto">
           <div className="bg-green-100 border border-green-300 text-green-800 px-4 py-3 rounded-xl shadow-md text-center animate-fade-in">
             Submission sent for review 👌
@@ -136,8 +177,23 @@ export default function SurvivorFantasy() {
         </div>
       )}
 
+      {showBannerP && (
+        <div className="mb-8 max-w-xl mx-auto">
+          <div className="bg-green-100 border border-green-300 text-green-800 px-4 py-3 rounded-xl shadow-md text-center animate-fade-in">
+            Prediction submitted 🔮
+          </div>
+        </div>
+      )}
+
       {/*Page Redirects*/}
       <div className="flex justify-end gap-3 mb-4">
+        <Link
+          href="/projects/survivor-fantasy/predictions"
+          className="text-sm px-3 py-1 rounded-full bg-[#EADFC8] text-[#3E2F1C] hover:bg-[#D9C9AA] transition"
+        >
+          Make Episode Prediction
+        </Link>
+
         <Link
           href="/projects/survivor-fantasy/submit"
           className="text-sm px-3 py-1 rounded-full bg-[#EADFC8] text-[#3E2F1C] hover:bg-[#D9C9AA] transition"
@@ -227,7 +283,12 @@ export default function SurvivorFantasy() {
               >
                 {/* Team Header */}
                 <div className="flex justify-between mb-4">
-                  <span className="text-2xl font-bold text-[#3E2F1C]">{team}</span>
+                  <button
+                    onClick={() => openTeamModal(team)}
+                    className="text-2xl font-bold text-[#3E2F1C] hover:underline"
+                  >
+                    {team}
+                  </button>
                   <motion.span
                     key={teamPoints}
                     initial={{ scale: 1.1 }}
@@ -410,6 +471,141 @@ export default function SurvivorFantasy() {
 
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+      {/*Modal for showing team points*/}
+      {selectedTeam && (
+        <div
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+          onClick={() => setSelectedTeam(null)}
+        >
+          <div
+            className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold text-[#3E2F1C]">
+                {selectedTeam} Predictions
+              </h2>
+
+              <button
+                onClick={() => setSelectedTeam(null)}
+                className="text-gray-500 hover:text-black"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 max-h-[400px] overflow-y-auto">
+              {teamPredictions.length === 0 && (
+                <p className="text-sm text-gray-500">
+                  No predictions yet.
+                </p>
+              )}
+
+              {teamPredictions.map((p, i) => {
+                const result = episodeResults.find(
+                  (r) => r.episode === p.episode
+                );
+
+                const immunityCorrect =
+                  result && p.immunity_pick === result.immunity_winner;
+
+                const eliminatedCorrect =
+                  result && p.eliminated_pick === result.eliminated_player;
+
+                const totalPoints =
+                  (immunityCorrect ? p.immunity_weight_snapshot : 0) + (eliminatedCorrect ? 5 : 0);
+
+                return (
+                  <div key={i} className="bg-[#F7F3E9] p-3 rounded-lg">
+                    
+                    {/* Episode header */}
+                    <div className="text-sm text-[#3E2F1C]/70 mb-1">
+                      Episode {p.episode}
+                    </div>
+
+                    {/* Results */}
+                    <div className="mt-2 text-sm text-[#3E2F1C] space-y-1">
+
+                      {(() => {
+                        const immunityPickName =
+                          contestants.find(c => c.id === p.immunity_pick)?.name || "—";
+
+                        const eliminatedPickName =
+                          contestants.find(c => c.id === p.eliminated_pick)?.name || "—";
+
+                        const result = episodeResults.find(r => r.episode === p.episode);
+
+                        // 🟡 UNRESOLVED STATE
+                        if (!result) {
+                          return (
+                            <div className="space-y-1">
+                              <div>🛡 Immunity Pick: {immunityPickName}</div>
+                              <div>🔥 Eliminated Pick: {eliminatedPickName}</div>
+                              <div className="text-gray-400 italic">
+                                Episode is unresolved
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        // 🟢 RESOLVED STATE
+                        const actualImmunity =
+                          contestants.find(c => c.id === result.immunity_winner)?.name || "—";
+
+                        const actualEliminated =
+                          contestants.find(c => c.id === result.eliminated_player)?.name || "—";
+
+                        const immunityCorrect = p.immunity_pick === result.immunity_winner;
+                        const eliminatedCorrect = p.eliminated_pick === result.eliminated_player;
+
+                        const totalPoints =
+                          (immunityCorrect ? p.immunity_weight : 0) + (eliminatedCorrect ? 5 : 0);
+
+                        return (
+                          <div className="space-y-1">
+                            
+                            <div>
+                              🛡 Immunity Pick: {immunityPickName}{" "}
+                              <span className={immunityCorrect ? "text-green-600" : "text-red-600"}>
+                                {immunityCorrect ? "✔" : "✖"}
+                              </span>
+
+                              {!immunityCorrect && (
+                                <span className="text-[#3E2F1C]/70">
+                                  {" "}was {actualImmunity}
+                                </span>
+                              )}
+                            </div>
+
+                            <div>
+                              🔥 Eliminated Pick: {eliminatedPickName}{" "}
+                              <span className={eliminatedCorrect ? "text-green-600" : "text-red-600"}>
+                                {eliminatedCorrect ? "✔" : "✖"}
+                              </span>
+
+                              {!eliminatedCorrect && (
+                                <span className="text-[#3E2F1C]/70">
+                                  {" "}was {actualEliminated}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="font-semibold">
+                              +{totalPoints} pts
+                            </div>
+
+                          </div>
+                        );
+                      })()}
+
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
