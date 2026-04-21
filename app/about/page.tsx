@@ -93,7 +93,7 @@ export default function AboutMe() {
           <div className="w-full h-106 rounded-2xl overflow-hidden">
             <img
               src="/images/about/dockdiving.gif"
-              alt="Dog dock diving"
+              alt="Dakota diving"
               className="w-full h-full object-cover object-[50%_60%]"
             />
           </div>
