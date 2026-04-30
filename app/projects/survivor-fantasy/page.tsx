@@ -19,8 +19,14 @@ export default function SurvivorFantasy() {
   const [contestantEvents, setContestantEvents] = useState<PointEvent[]>([]);
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
   const [teamPredictions, setTeamPredictions] = useState<any[]>([]);
+  const [publicPredictions, setPublicPredictions] = useState<any[]>([]);
   const [episodeResults, setEpisodeResults] = useState<any[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
 
+  useEffect(() => {
+    const flag = localStorage.getItem("is_admin");
+    if (flag === "true") setIsAdmin(true);
+  }, []);
 
   useEffect(() => {
     // only run this in the browser
@@ -82,6 +88,7 @@ export default function SurvivorFantasy() {
   }));
 
   const teamTotals: Record<string, number> = {};
+
   //1. Contestant points
   contestantsWithPoints.forEach((c) => {
     teamTotals[c.team] = (teamTotals[c.team] || 0) + c.points;
@@ -121,12 +128,17 @@ export default function SurvivorFantasy() {
       .eq("team", team)
       .order("episode", { ascending: false });
 
+    const { data: publicData } = await supabase
+      .from("public_predictions")
+      .select("*");
+
     const { data: resultsData } = await supabase
       .from("episode_results")
       .select("*");
 
     if (predictionsData) setTeamPredictions(predictionsData);
     if (resultsData) setEpisodeResults(resultsData);
+    if (publicData) setPublicPredictions(publicData);
   };
 
   const resultsMap = episodeResults.reduce((acc, r) => {
@@ -162,6 +174,11 @@ export default function SurvivorFantasy() {
     return groups;
   }, {});
 
+  const visibleEvents = pointEvents
+    .filter((e) => e.type !== "team")
+    .slice(-20)
+    .reverse();
+
   return (
     <div className="min-h-screen px-4 sm:px-6 py-12 sm:py-20 max-w-6xl mx-auto bg-[#F7F3E9]">
       <h1 className="text-3xl sm:text-5xl font-bold mb-8 sm:mb-12 text-[#3E2F1C] text-center">
@@ -185,84 +202,92 @@ export default function SurvivorFantasy() {
         </div>
       )}
 
-      {/*Page Redirects*/}
-      <div className="flex justify-end gap-3 mb-4">
+      {/* Page Redirects */}
+      <div className="flex flex-col sm:flex-row sm:justify-end gap-3 mb-4">
+        
         <Link
           href="/projects/survivor-fantasy/predictions"
-          className="text-sm px-3 py-1 rounded-full bg-[#EADFC8] text-[#3E2F1C] hover:bg-[#D9C9AA] transition"
+          className="flex items-center justify-center text-base sm:text-sm px-4 py-2 rounded-full bg-[#EADFC8] text-[#3E2F1C] hover:bg-[#D9C9AA] transition shadow-sm active:scale-[0.98]"
         >
           Make Episode Prediction
         </Link>
 
         <Link
           href="/projects/survivor-fantasy/submit"
-          className="text-sm px-3 py-1 rounded-full bg-[#EADFC8] text-[#3E2F1C] hover:bg-[#D9C9AA] transition"
+          className="flex items-center justify-center text-base sm:text-sm px-4 py-2 rounded-full bg-[#EADFC8] text-[#3E2F1C] hover:bg-[#D9C9AA] transition shadow-sm active:scale-[0.98]"
         >
           Submit Point Entry
         </Link>
 
-        <Link
-          href="/projects/survivor-fantasy/admin"
-          className="text-sm px-3 py-1 rounded-full bg-[#D4B483] text-[#3E2F1C] hover:bg-[#C6A36F] transition"
-        >
-          Admin
-        </Link>
+        {isAdmin && (
+          <Link
+            href="/projects/survivor-fantasy/admin"
+            className="flex items-center justify-center text-base sm:text-sm px-4 py-2 rounded-full bg-[#D4B483] text-[#3E2F1C] hover:bg-[#C6A36F] transition shadow-sm active:scale-[0.98]"
+          >
+            Admin
+          </Link>
+        )}
+
       </div>
 
       {/* Recent Activity */}
       <section className="mb-10">
         <h2 className="text-2xl sm:text-3xl font-bold mb-3 sm:mb-4 text-[#3E2F1C]">Recent Activity</h2>
+        <div className="relative max-w-2xl">
+          <div className="space-y-2 sm:space-y-3 max-w-2xl max-h-[580px] overflow-y-auto pr-1">
+            <div className="space-y-2 sm:space-y-3 max-w-2xl">
+              <AnimatePresence>
+                {visibleEvents.map((event, idx) => {
+                  const contestant = contestants.find(
+                    (c) => c.id === event.contestant_id
+                  );
+                  if (!contestant) return null;
 
-        <div className="space-y-2 sm:space-y-3 max-w-2xl">
-          <AnimatePresence>
-            {pointEvents.slice(-8).reverse().map((event, idx) => {
-              const contestant = contestants.find(
-                (c) => c.id === event.contestant_id
-              );
-              if (!contestant) return null;
+                  const imgName = contestant.name.replace(/ /g, "_");
 
-              const imgName = contestant.name.replace(/ /g, "_");
-
-              return (
-                <motion.div
-                  key={`${event.contestant_id}-${event.points}-${idx}`}
-                  initial={{ opacity: 0, y: 15 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.3 }}
-                  className="flex justify-between bg-[#F7F3E9] p-3 rounded-lg shadow-sm border-l-4 border-[#F29E4C]"
-                >
-                  <div className="flex items-center gap-3">
-                    <img
-                      src={`/images/contestants/${imgName}.png`}
-                      alt={contestant.name}
-                      onError={(e) => { (e.target as HTMLImageElement).src = '/images/placeholder.png'; }}
-                      className="w-12 h-16 sm:w-14 sm:h-20 object-contain rounded-lg bg-neutral-200"
-                    />
-
-                    <span
-                      className={`font-medium text-lg ${
-                        event.points > 0 ? "text-green-700" : "text-red-700"
-                      }`}
+                  return (
+                    <motion.div
+                      key={`${event.contestant_id}-${event.points}-${idx}`}
+                      initial={{ opacity: 0, y: 15 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.3 }}
+                      className="flex justify-between bg-[#F7F3E9] p-3 rounded-lg shadow-sm border-l-4 border-[#F29E4C]"
                     >
-                      <span
-                        className={`font-medium text-lg ${
-                          event.points > 0 ? "text-green-700" : "text-red-700"
-                        }`}
-                      >
-                        {contestant.name} ({event.points > 0 ? "+" : ""}
-                        {event.points})
-                      </span>
-                    </span>
-                  </div>
+                      <div className="flex items-center gap-3">
+                        <img
+                          src={`/images/contestants/${imgName}.png`}
+                          alt={contestant.name}
+                          onError={(e) => { (e.target as HTMLImageElement).src = '/images/placeholder.png'; }}
+                          className="w-12 h-16 sm:w-14 sm:h-20 object-contain rounded-lg bg-neutral-200"
+                        />
 
-                  <span className="text-[#3E2F1C]/80 italic text-sm">
-                    {event.reason || "No reason"}
-                  </span>
-                </motion.div>
-              );
-            })}
-          </AnimatePresence>
+                        <span
+                          className={`font-medium text-lg ${
+                            event.points > 0 ? "text-green-700" : "text-red-700"
+                          }`}
+                        >
+                          <span
+                            className={`font-medium text-lg ${
+                              event.points > 0 ? "text-green-700" : "text-red-700"
+                            }`}
+                          >
+                            {contestant.name} ({event.points > 0 ? "+" : ""}
+                            {event.points})
+                          </span>
+                        </span>
+                      </div>
+
+                      <span className="text-[#3E2F1C]/80 italic text-sm">
+                        {event.reason || "No reason"}
+                      </span>
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
+            </div>
+          </div>
+          <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-50 bg-gradient-to-t from-[#F7F3E9] to-transparent" />
         </div>
       </section>
 
@@ -390,6 +415,7 @@ export default function SurvivorFantasy() {
           </div>
         </div>
       </details>
+
       {/* Modal for showing survivor contestant recent points */}
       {selectedContestant && (
         <div
@@ -475,6 +501,7 @@ export default function SurvivorFantasy() {
           </div>
         </div>
       )}
+
       {/*Modal for showing team points*/}
       {selectedTeam && (
         <div
@@ -509,6 +536,50 @@ export default function SurvivorFantasy() {
                 const result = episodeResults.find(
                   (r) => r.episode === p.episode
                 );
+
+                const guestEventsForEpisode = pointEvents.filter(
+                  (e) =>
+                    e.type === "team" &&
+                    e.team === selectedTeam &&
+                    e.episode === p.episode &&
+                    e.reason?.startsWith("Guest (")
+                );
+
+                const guestBreakdown = guestEventsForEpisode.map((e) => {
+                  const guestName = e.reason?.match(/Guest \((.*?)\)/)?.[1] || "Guest";
+
+                  const prediction = publicPredictions.find(
+                    (gp) =>
+                      gp.episode === e.episode &&
+                      (gp.team_1 === selectedTeam || gp.team_2 === selectedTeam) &&
+                      gp.name === guestName
+                  );
+
+                  if (!prediction) return null;
+
+                  const result = episodeResults.find(r => r.episode === e.episode);
+
+                  const immunityCorrect =
+                    prediction.immunity_pick === result?.immunity_winner;
+
+                  const eliminatedCorrect =
+                    prediction.eliminated_pick === result?.eliminated_player;
+
+                  const immunityName =
+                    contestants.find(c => c.id === prediction.immunity_pick)?.name;
+
+                  const eliminatedName =
+                    contestants.find(c => c.id === prediction.eliminated_pick)?.name;
+
+                  return {
+                    guestName,
+                    immunityCorrect,
+                    eliminatedCorrect,
+                    immunityName,
+                    eliminatedName,
+                    totalPoints: e.points,
+                  };
+                }).filter((g): g is NonNullable<typeof g> => g !== null);
 
                 const immunityCorrect =
                   result && p.immunity_pick === result.immunity_winner;
@@ -597,6 +668,35 @@ export default function SurvivorFantasy() {
                             <div className="font-semibold">
                               +{totalPoints} pts
                             </div>
+
+                            {/* Guest Prediction Points */}
+                            {guestBreakdown.length > 0 && (
+                              <div className="mt-2 space-y-1 text-sm">
+                                {guestBreakdown.map((g, idx) => (
+                                  <div key={idx} className="text-[#3E2F1C]/80">
+                                    
+                                    {g.immunityCorrect && (
+                                      <div>
+                                        {g.guestName} predicted {g.immunityName} to win immunity —{" "}
+                                        <span className="text-green-600 font-medium">
+                                          +{g.totalPoints - (g.eliminatedCorrect ? 5 : 0)} pts
+                                        </span>
+                                      </div>
+                                    )}
+
+                                    {g.eliminatedCorrect && (
+                                      <div>
+                                        {g.guestName} predicted {g.eliminatedName} to be eliminated —{" "}
+                                        <span className="text-green-600 font-medium">
+                                          +5 pts
+                                        </span>
+                                      </div>
+                                    )}
+
+                                  </div>
+                                ))}
+                              </div>
+                            )}
 
                           </div>
                         );

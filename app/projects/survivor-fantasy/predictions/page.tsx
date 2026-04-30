@@ -20,8 +20,24 @@ export default function PredictionsPage() {
   const [immunityPick, setImmunityPick] = useState("");
   const [eliminatedPick, setEliminatedPick] = useState("");
   const [currentEpisode, setCurrentEpisode] = useState(1);
+  const [guestId, setGuestId] = useState("");
+  const [isGuest, setIsGuest] = useState(false);
+  const [guestName, setGuestName] = useState("");
+  const [team1, setTeam1] = useState("");
+  const [team2, setTeam2] = useState("");
 
   const router = useRouter();
+
+  useEffect(() => {
+    let id = localStorage.getItem("guest_id");
+
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem("guest_id", id);
+    }
+
+    setGuestId(id);
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -45,36 +61,85 @@ export default function PredictionsPage() {
   }, []);
 
 const handleSubmit = async () => {
-  if (!team || !immunityPick || !eliminatedPick) {
+  if (!isGuest && (!team || !immunityPick || !eliminatedPick)) {
+    alert("Fill everything out");
+    return;
+  }
+
+  if (isGuest && (!guestName || !immunityPick || !eliminatedPick)) {
     alert("Fill everything out");
     return;
   }
 
   try {
       // Check for existing submission
-      const { data: existing } = await supabase
-        .from("predictions")
-        .select("id")
-        .eq("team", team)
-        .eq("episode", currentEpisode)
-        .limit(1);
+      if (!isGuest) {
+        const { data: existing } = await supabase
+          .from("predictions")
+          .select("id")
+          .eq("team", team)
+          .eq("episode", currentEpisode)
+          .limit(1);
 
-      if (existing && existing.length > 0) {
-        alert("You already submitted for this episode");
+        if (existing && existing.length > 0) {
+          alert("You already submitted for this episode");
+          return;
+        }
+      }
+      else{
+        const { data: existing } = await supabase
+          .from("public_predictions")
+          .select("id")
+          .eq("guest_id", guestId)
+          .eq("episode", currentEpisode)
+          .limit(1);
+
+        if (existing && existing.length > 0) {
+          alert("You already submitted for this episode");
+          return;
+        }
+      }
+
+      if (isGuest && !team1) {
+        alert("Select at least one team");
         return;
       }
 
       const contestant = contestants.find(c => c.id === immunityPick);
+      
+      if (isGuest) {
+        const { error } = await supabase
+          .from("public_predictions")
+          .insert({
+            guest_id: guestId,
+            name: guestName,
+            team_1: team1,
+            team_2: team2 || null,
+            immunity_pick: immunityPick,
+            immunity_weight: contestant?.immunity_weight,
+            eliminated_pick: eliminatedPick,
+            episode: currentEpisode,
+          });
 
-      const { error } = await supabase.from("predictions").insert({
-        team,
-        immunity_pick: immunityPick,
-        immunity_weight: contestant?.immunity_weight,
-        eliminated_pick: eliminatedPick,
-        episode: currentEpisode,
-      });
-
-      if (error) throw error;
+        if (error) {
+          if (error.code === "23505") {
+            alert("You already submitted this episode");
+          } else {
+            throw error;
+          }
+        }
+      }
+      else{
+        const { error } = await supabase.from("predictions").insert({
+          team,
+          immunity_pick: immunityPick,
+          immunity_weight: contestant?.immunity_weight,
+          eliminated_pick: eliminatedPick,
+          episode: currentEpisode,
+        });
+      
+        if (error) throw error;
+      }
 
       router.push("/projects/survivor-fantasy?predicted=true");
     } catch (err) {
@@ -91,19 +156,31 @@ return (
           Make Your Predictions
         </h1>
 
+        {/* Guest toggle */}
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={isGuest}
+            onChange={() => setIsGuest(!isGuest)}
+          />
+          I'm a guest
+        </label>
+
         {/* Team */}
-        <select
-          value={team}
-          onChange={(e) => setTeam(e.target.value)}
-          className="w-full bg-white text-base text-[#3E2F1C] border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
-        >
-          <option value="">Select Team</option>
-          {teams.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
+        {!isGuest && (
+          <select
+            value={team}
+            onChange={(e) => setTeam(e.target.value)}
+            className="w-full bg-white text-base text-[#3E2F1C] border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
+          >
+            <option value="">Select Team</option>
+            {teams.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        )}
 
         {/* Immunity */}
         <select
@@ -137,6 +214,46 @@ return (
               </option>
             ))}
         </select>
+
+        {/* Guest Input */}
+        {isGuest && (
+          <div className="space-y-3">
+            <input
+              placeholder="Your first name"
+              value={guestName}
+              onChange={(e) => setGuestName(e.target.value)}
+              className="w-full border rounded px-3 py-2"
+            />
+
+            <select
+              value={team1}
+              onChange={(e) => setTeam1(e.target.value)}
+              className="w-full border rounded px-3 py-2"
+            >
+              <option value="">Select Team</option>
+              {teams.map((t) => (
+                <option key={t}>{t}</option>
+              ))}
+            </select>
+
+            <select
+              value={team2}
+              onChange={(e) => setTeam2(e.target.value)}
+              className="w-full border rounded px-3 py-2"
+            >
+              <option value="">Second team (optional)</option>
+              {teams
+                .filter((t) => t !== team1)
+                .map((t) => (
+                  <option key={t}>{t}</option>
+                ))}
+            </select>
+
+            <p className="text-xs text-gray-500">
+              If you pick two teams, points will be split evenly.
+            </p>
+          </div>
+        )}
 
         {/* Submit */}
         <button

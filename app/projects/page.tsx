@@ -13,7 +13,7 @@ export default function Projects() {
       <div className="grid md:grid-cols-2 gap-8">
         {/* Spotify Recommender */}
         <Link
-          href="/projects/nicks-picks"
+          href="/projects/survivor-fantasy/admin"
           className="group p-8 border border-neutral-200 rounded-xl hover:shadow-md transition"
         >
           <div className="mb-4 inline-flex items-center justify-center w-12 h-12 rounded-lg bg-neutral-100 group-hover:bg-neutral-200 transition">

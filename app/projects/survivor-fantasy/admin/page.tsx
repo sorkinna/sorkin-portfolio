@@ -26,10 +26,16 @@ export default function AdminPage() {
   const [immunityWinner, setImmunityWinner] = useState("");
   const [eliminatedPlayer, setEliminatedPlayer] = useState("");
 
+  useEffect(() => {
+    const flag = localStorage.getItem("is_admin");
+    if (flag === "true") setIsAdmin(true);
+  }, []);
+
   // Function to handle login
   const handleLogin = () => {
     if (passwordInput === process.env.NEXT_PUBLIC_ADMIN_KEY) {
       setIsAdmin(true);
+      localStorage.setItem("is_admin", "true");
     } else {
       alert("Incorrect password!");
     }
@@ -159,6 +165,63 @@ export default function AdminPage() {
       return;
     }
 
+    const eventsToInsert: any[] = [];
+
+    // Public Predictions
+    const { data: publicPredictions } = await supabase
+      .from("public_predictions")
+      .select("*")
+      .eq("episode", currentEpisode);
+
+    if (publicPredictions) {
+      publicPredictions.forEach((p) => {
+        let points = 0;
+
+        if (p.immunity_pick === immunityWinner) {
+          points += p.immunity_weight ?? 0;
+        }
+
+        if (p.eliminated_pick === eliminatedPlayer) {
+          points += 5;
+        }
+
+        if (points === 0) return;
+
+        // 🧠 split logic
+        if (p.team_2) {
+          const split = Math.floor(points / 2);
+
+          eventsToInsert.push(
+            {
+              team: p.team_1,
+              points: split,
+              reason: `Guest (${p.name || "Anon"})`,
+              episode: currentEpisode,
+              type: "team",
+              contestant_id: null,
+            },
+            {
+              team: p.team_2,
+              points: points - split, // handle odd numbers
+              reason: `Guest (${p.name || "Anon"})`,
+              episode: currentEpisode,
+              type: "team",
+              contestant_id: null,
+            }
+          );
+        } else {
+          eventsToInsert.push({
+            team: p.team_1,
+            points,
+            reason: `Guest (${p.name || "Anon"})`,
+            episode: currentEpisode,
+            type: "team",
+            contestant_id: null,
+          });
+        }
+      });
+    }
+
     // Get predictions
     const { data: predictions } = await supabase
       .from("predictions")
@@ -166,8 +229,6 @@ export default function AdminPage() {
       .eq("episode", currentEpisode);
 
     if (!predictions) return;
-
-    const eventsToInsert: any[] = [];
 
     predictions.forEach((p) => {
       let points = 0;
@@ -191,7 +252,8 @@ export default function AdminPage() {
         episode: currentEpisode,
         type: "team", // 👈 key addition
         contestant_id: null,
-      });
+      });      
+
     });
 
     if (eventsToInsert.length > 0) {
