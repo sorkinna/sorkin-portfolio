@@ -180,8 +180,8 @@ export default function SurvivorFantasy() {
     .reverse();
 
   return (
-    <div className="min-h-screen px-4 sm:px-6 py-12 sm:py-20 max-w-6xl mx-auto bg-[#F7F3E9]">
-      <h1 className="text-3xl sm:text-5xl font-bold mb-8 sm:mb-12 text-[#3E2F1C] text-center">
+    <div className="min-h-screen px-4 sm:px-6 pt-4 sm:pt-8 pb-12 max-w-6xl mx-auto bg-[#F7F3E9]">
+      <h1 className="text-3xl sm:text-5xl font-bold mb-4 sm:mb-12 text-[#3E2F1C] text-center">
         Survivor Fantasy League
       </h1>
 
@@ -203,18 +203,18 @@ export default function SurvivorFantasy() {
       )}
 
       {/* Page Redirects */}
-      <div className="flex flex-col sm:flex-row sm:justify-end gap-3 mb-4">
+      <div className="flex flex-col sm:flex-row sm:justify-end gap-2 sm:gap-3 mb-3 sm:mb-4">
         
         <Link
           href="/projects/survivor-fantasy/predictions"
-          className="flex items-center justify-center text-base sm:text-sm px-4 py-2 rounded-full bg-[#EADFC8] text-[#3E2F1C] hover:bg-[#D9C9AA] transition shadow-sm active:scale-[0.98]"
+          className="flex items-center justify-center text-sm sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-[#EADFC8] text-[#3E2F1C] hover:bg-[#D9C9AA] transition shadow-sm active:scale-[0.98]"
         >
           Make Episode Prediction
         </Link>
 
         <Link
           href="/projects/survivor-fantasy/submit"
-          className="flex items-center justify-center text-base sm:text-sm px-4 py-2 rounded-full bg-[#EADFC8] text-[#3E2F1C] hover:bg-[#D9C9AA] transition shadow-sm active:scale-[0.98]"
+          className="flex items-center justify-center text-sm sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-[#EADFC8] text-[#3E2F1C] hover:bg-[#D9C9AA] transition shadow-sm active:scale-[0.98]"
         >
           Submit Point Entry
         </Link>
@@ -222,7 +222,7 @@ export default function SurvivorFantasy() {
         {isAdmin && (
           <Link
             href="/projects/survivor-fantasy/admin"
-            className="flex items-center justify-center text-base sm:text-sm px-4 py-2 rounded-full bg-[#D4B483] text-[#3E2F1C] hover:bg-[#C6A36F] transition shadow-sm active:scale-[0.98]"
+            className="flex items-center justify-center text-sm sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-[#EADFC8] text-[#3E2F1C] hover:bg-[#D9C9AA] transition shadow-sm active:scale-[0.98]"
           >
             Admin
           </Link>
@@ -234,7 +234,7 @@ export default function SurvivorFantasy() {
       <section className="mb-10">
         <h2 className="text-2xl sm:text-3xl font-bold mb-3 sm:mb-4 text-[#3E2F1C]">Recent Activity</h2>
         <div className="relative max-w-2xl">
-          <div className="space-y-2 sm:space-y-3 max-w-2xl max-h-[580px] overflow-y-auto pr-1">
+          <div className="space-y-2 sm:space-y-3 max-w-2xl max-h-[38vh] sm:max-h-[580px] overflow-y-auto pr-1">
             <div className="space-y-2 sm:space-y-3 max-w-2xl">
               <AnimatePresence>
                 {visibleEvents.map((event, idx) => {
@@ -287,7 +287,7 @@ export default function SurvivorFantasy() {
               </AnimatePresence>
             </div>
           </div>
-          <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-50 bg-gradient-to-t from-[#F7F3E9] to-transparent" />
+          <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-30 bg-gradient-to-t from-[#F7F3E9] to-transparent" />
         </div>
       </section>
 
