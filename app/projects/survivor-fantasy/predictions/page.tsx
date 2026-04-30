@@ -157,7 +157,7 @@ return (
         </h1>
 
         {/* Guest toggle */}
-        <label className="flex items-center gap-2">
+        <label className="flex items-center gap-2 text-[#3E2F1C] text-sm font-medium">
           <input
             type="checkbox"
             checked={isGuest}
@@ -222,13 +222,13 @@ return (
               placeholder="Your first name"
               value={guestName}
               onChange={(e) => setGuestName(e.target.value)}
-              className="w-full border rounded px-3 py-2"
+              className="w-full bg-white text-base text-[#3E2F1C] font-medium border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
             />
 
             <select
               value={team1}
               onChange={(e) => setTeam1(e.target.value)}
-              className="w-full border rounded px-3 py-2"
+              className="w-full bg-white text-base text-[#3E2F1C] font-medium border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
             >
               <option value="">Select Team</option>
               {teams.map((t) => (
@@ -239,7 +239,7 @@ return (
             <select
               value={team2}
               onChange={(e) => setTeam2(e.target.value)}
-              className="w-full border rounded px-3 py-2"
+              className="w-full bg-white text-base text-[#3E2F1C] font-medium border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
             >
               <option value="">Second team (optional)</option>
               {teams
@@ -249,7 +249,7 @@ return (
                 ))}
             </select>
 
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-gray-700 sm:text-gray-500">
               If you pick two teams, points will be split evenly.
             </p>
           </div>
