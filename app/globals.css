@@ -40,3 +40,24 @@ body {
   animation: fadeIn 0.3s ease-out;
 }
 
+@keyframes pickIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.92) translateY(12px);
+  }
+
+  15% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+
+  75% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.02) translateY(-8px);
+  }
+}

@@ -22,6 +22,7 @@ export default function SurvivorFantasy() {
   const [publicPredictions, setPublicPredictions] = useState<any[]>([]);
   const [episodeResults, setEpisodeResults] = useState<any[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isLoadingTeam, setIsLoadingTeam] = useState(false);
 
   useEffect(() => {
     const flag = localStorage.getItem("is_admin");
@@ -121,6 +122,10 @@ export default function SurvivorFantasy() {
   //Open team history
   const openTeamModal = async (team: string) => {
     setSelectedTeam(team);
+    setIsLoadingTeam(true);
+    setTeamPredictions([]);
+    setPublicPredictions([]);
+    setEpisodeResults([]);
 
     const { data: predictionsData } = await supabase
       .from("predictions")
@@ -139,6 +144,7 @@ export default function SurvivorFantasy() {
     if (predictionsData) setTeamPredictions(predictionsData);
     if (resultsData) setEpisodeResults(resultsData);
     if (publicData) setPublicPredictions(publicData);
+    setIsLoadingTeam(false);
   };
 
   const resultsMap = episodeResults.reduce((acc, r) => {
@@ -526,7 +532,11 @@ export default function SurvivorFantasy() {
             </div>
 
             <div className="space-y-3 max-h-[400px] overflow-y-auto">
-              {teamPredictions.length === 0 && (
+              {isLoadingTeam ? (
+                <p className="text-sm text-gray-500 italic">
+                  Loading predictions...
+                </p>
+              ) : teamPredictions.length === 0 && (
                 <p className="text-sm text-gray-500">
                   No predictions yet.
                 </p>
