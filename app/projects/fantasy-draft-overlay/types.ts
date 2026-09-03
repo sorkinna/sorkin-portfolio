@@ -9,6 +9,7 @@ export type DraftPlayer = {
 
 export type LastPick = {
   teamName: string;
+  username: string;
   player: DraftPlayer;
 };
 
@@ -18,12 +19,14 @@ export type DraftPick = {
   draftSlot: number;
   rosterId: number;
   teamName: string;
+  username: string;
   player: DraftPlayer;
 };
 
 export type DraftTeam = {
   rosterId: number;
   ownerId: string;
+  username: string;
   teamName: string;
   draftSlot: number | null;
   players: DraftPlayer[];
@@ -54,12 +57,14 @@ export type DraftOverlayData = {
 
   currentTeam: {
     rosterId: number;
+    username: string;
     name: string | null;
     players: DraftPlayer[];
   } | null;
 
   lastPick: {
     teamName: string | null;
+    username: string | null;
     player: DraftPlayer | null;
   } | null;
 

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+
 import type {
   DraftPlayer,
   DraftPick,
@@ -8,64 +9,50 @@ import type {
 
 const LEAGUE_ID = "1365310592465780736";
 
-/*
- * TESTING:
- *
- * Put your Sleeper mock draft ID here while testing.
- *
- * When you are ready for the real draft, change this to:
- *
- * const MOCK_DRAFT_ID = "";
- *
- * The overlay will then automatically use the real league draft.
- */
-const MOCK_DRAFT_ID = "";
+// Keep this populated while testing mock drafts.
+// Set to "" before the real draft.
+const MOCK_DRAFT_ID = "1401052530070261760";
 
 const REAL_DRAFT_ID = "1365310592478371840";
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
 
+/*
+ * League/users/rosters don't change during the draft,
+ * so keep them cached in the server process.
+ */
+const STATIC_CACHE_DURATION = 5 * 60_000;
+
 type SleeperDraft = {
   draft_id: string;
-  league_id: string | null;
-  status: string;
+  league_id: string;
   type: string;
-
-  settings?: {
-    teams?: number;
-    rounds?: number;
-    pick_timer?: number;
-  };
-
+  status: string;
+  season: string;
+  season_type: string;
+  start_time: number | null;
+  last_picked: number | null;
+  last_picked_at: number | null;
+  pick_timer: number | null;
+  slot_to_roster_id?: Record<string, number>;
   teams?: number;
   rounds?: number;
-
-  slot_to_roster_id?: Record<string, number>;
-
-  draft_order?: Record<string, number>;
-
-  metadata?: {
-    league_id?: string;
-  };
 };
 
 type SleeperLeague = {
   league_id: string;
   name: string;
   status: string;
-  draft_id?: string;
+  total_rosters: number;
 };
 
 type SleeperUser = {
   user_id: string;
-
-  display_name?: string;
   username?: string;
-
+  display_name?: string;
   metadata?: {
     team_name?: string;
   };
-
   settings?: {
     team_name?: string;
   };
@@ -74,46 +61,44 @@ type SleeperUser = {
 type SleeperRoster = {
   roster_id: number;
   owner_id: string;
-
+  players?: string[];
   metadata?: {
     team_name?: string;
   };
 };
 
-type SleeperPick = {
-  pick_no: number;
-  round: number;
-  draft_slot: number;
-  roster_id: number | string;
-  player_id: string;
+type SleeperPickMetadata = {
+  first_name?: string;
+  last_name?: string;
+  player_id?: string;
+  position?: string;
+  team?: string;
+};
 
-  metadata?: {
-    first_name?: string;
-    last_name?: string;
-    position?: string;
-    team?: string;
-  };
+type SleeperPick = {
+  draft_id: string;
+  draft_slot: number;
+  is_keeper: boolean | null;
+  metadata?: SleeperPickMetadata;
+  pick_no: number;
+  picked_by: string | null;
+  player_id: string;
+  reactions?: unknown;
+  roster_id: number | null;
+  round: number;
 };
 
 type StaticDraftData = {
   league: SleeperLeague;
   users: SleeperUser[];
   rosters: SleeperRoster[];
-
-  /*
-   * Permanent league draft mapping.
-   *
-   * This translates a Sleeper draft slot into the
-   * actual fantasy football roster.
-   */
-  realDraft: SleeperDraft | null;
-
-  slotToRosterId: Record<string, number>;
-
-  expiresAt: number;
+  realDraft: SleeperDraft;
 };
 
-let staticCache: StaticDraftData | null = null;
+let staticCache: {
+  data: StaticDraftData;
+  expiresAt: number;
+} | null = null;
 
 async function sleeperFetch<T>(path: string): Promise<T> {
   const response = await fetch(`${SLEEPER_API}${path}`, {
@@ -126,31 +111,63 @@ async function sleeperFetch<T>(path: string): Promise<T> {
     );
   }
 
-  return response.json();
+  return response.json() as Promise<T>;
 }
 
-function getDraftTeams(draft: SleeperDraft): number {
-  return draft.settings?.teams ?? draft.teams ?? 12;
-}
-
-function getDraftRounds(draft: SleeperDraft): number {
-  return draft.settings?.rounds ?? draft.rounds ?? 16;
-}
-
-/**
- * Sleeper can expose the fantasy team name in several
- * different locations depending on the league/draft.
+/*
+ * Use the mock draft while testing.
  *
- * Prefer the actual fantasy team name rather than the
- * owner's display name or username.
+ * Before the real draft, change MOCK_DRAFT_ID to "".
  */
+async function getActiveDraft(): Promise<SleeperDraft> {
+  const draftId = MOCK_DRAFT_ID.trim() !== "" ? MOCK_DRAFT_ID : REAL_DRAFT_ID;
+
+  return sleeperFetch<SleeperDraft>(`/draft/${draftId}`);
+}
+
+/*
+ * League information is static during the draft.
+ *
+ * This is deliberately kept separate from the live
+ * draft data so we don't repeatedly request users,
+ * rosters, and the real draft on every poll.
+ */
+async function getStaticData(): Promise<StaticDraftData> {
+  const now = Date.now();
+
+  if (staticCache && staticCache.expiresAt > now) {
+    return staticCache.data;
+  }
+
+  const [league, users, rosters, realDraft] = await Promise.all([
+    sleeperFetch<SleeperLeague>(`/league/${LEAGUE_ID}`),
+    sleeperFetch<SleeperUser[]>(`/league/${LEAGUE_ID}/users`),
+    sleeperFetch<SleeperRoster[]>(`/league/${LEAGUE_ID}/rosters`),
+    sleeperFetch<SleeperDraft>(`/draft/${REAL_DRAFT_ID}`),
+  ]);
+
+  const data: StaticDraftData = {
+    league,
+    users,
+    rosters,
+    realDraft,
+  };
+
+  staticCache = {
+    data,
+    expiresAt: now + STATIC_CACHE_DURATION,
+  };
+
+  return data;
+}
+
 function getTeamName(
   user: SleeperUser | undefined,
-  roster: SleeperRoster | undefined,
+  roster: SleeperRoster,
   rosterId: number,
 ): string {
   return (
-    roster?.metadata?.team_name ??
+    roster.metadata?.team_name ??
     user?.metadata?.team_name ??
     user?.settings?.team_name ??
     user?.display_name ??
@@ -159,96 +176,35 @@ function getTeamName(
   );
 }
 
-/**
- * Get the draft that should currently power the overlay.
- *
- * TESTING:
- *   If MOCK_DRAFT_ID is populated, use that draft.
- *
- * REAL DRAFT:
- *   If MOCK_DRAFT_ID is empty, use the real league draft.
- *
- * This means Friday requires only one change:
- *
- *   const MOCK_DRAFT_ID = "";
- */
-async function getActiveDraft(): Promise<SleeperDraft> {
-  if (MOCK_DRAFT_ID.trim() !== "") {
-    return sleeperFetch<SleeperDraft>(`/draft/${MOCK_DRAFT_ID}`);
-  }
-
-  return sleeperFetch<SleeperDraft>(`/draft/${REAL_DRAFT_ID}`);
+function getUsername(
+  user: SleeperUser | undefined,
+  roster: SleeperRoster,
+): string {
+  return user?.username ?? user?.display_name ?? roster.owner_id;
 }
 
-/**
- * Static league information changes very rarely.
+/*
+ * Player information now comes directly from the
+ * draft pick's metadata.
  *
- * Cache it for 60 seconds so we aren't hammering
- * the Sleeper API with the same information every poll.
+ * This completely eliminates the expensive
+ * /players/nfl request.
  */
-async function getStaticData(draft: SleeperDraft): Promise<StaticDraftData> {
-  const now = Date.now();
-
-  if (staticCache && staticCache.expiresAt > now) {
-    return staticCache;
-  }
-
-  const [league, users, rosters] = await Promise.all([
-    sleeperFetch<SleeperLeague>(`/league/${LEAGUE_ID}`),
-
-    sleeperFetch<SleeperUser[]>(`/league/${LEAGUE_ID}/users`),
-
-    sleeperFetch<SleeperRoster[]>(`/league/${LEAGUE_ID}/rosters`),
-  ]);
-
-  /*
-   * The real league draft contains the permanent
-   * draft-slot -> roster mapping.
-   */
-  let realDraft: SleeperDraft | null = null;
-
-  if (league.draft_id) {
-    try {
-      realDraft = await sleeperFetch<SleeperDraft>(`/draft/${league.draft_id}`);
-    } catch {
-      realDraft = null;
-    }
-  }
-
-  /*
-   * Prefer the real league mapping.
-   *
-   * If it isn't available for some reason, fall back
-   * to the currently selected draft's mapping.
-   */
-  const slotToRosterId =
-    realDraft?.slot_to_roster_id ?? draft.slot_to_roster_id ?? {};
-
-  staticCache = {
-    league,
-    users,
-    rosters,
-    realDraft,
-    slotToRosterId,
-    expiresAt: now + 60_000,
-  };
-
-  return staticCache;
-}
-
 function normalizePlayer(pick: SleeperPick): DraftPlayer {
   const firstName = pick.metadata?.first_name ?? "";
 
   const lastName = pick.metadata?.last_name ?? "";
 
-  return {
-    playerId: pick.player_id,
+  const name = `${firstName} ${lastName}`.trim() || pick.player_id;
 
-    name: `${firstName} ${lastName}`.trim() || "Unknown Player",
+  return {
+    playerId: pick.metadata?.player_id ?? pick.player_id,
+
+    name,
 
     position: pick.metadata?.position ?? "—",
 
-    nflTeam: pick.metadata?.team ?? "—",
+    nflTeam: pick.metadata?.team ?? "FA",
 
     round: pick.round,
 
@@ -256,72 +212,180 @@ function normalizePlayer(pick: SleeperPick): DraftPlayer {
   };
 }
 
+function getDraftSlot(
+  slotToRosterId: Record<string, number>,
+  rosterId: number,
+): number | null {
+  const entry = Object.entries(slotToRosterId).find(
+    ([, mappedRosterId]) => mappedRosterId === rosterId,
+  );
+
+  return entry ? Number(entry[0]) : null;
+}
+
+/*
+ * Fallback for drafts that don't provide draft_slot
+ * or roster_id.
+ *
+ * The league uses a standard snake draft.
+ */
+function getSnakeDraftSlot(pickNo: number, teamCount: number): number {
+  const round = Math.floor((pickNo - 1) / teamCount) + 1;
+
+  const pickWithinRound = ((pickNo - 1) % teamCount) + 1;
+
+  return round % 2 === 1 ? pickWithinRound : teamCount - pickWithinRound + 1;
+}
+
+function getTotalPicks(
+  draft: SleeperDraft,
+  teamCount: number,
+  rounds: number,
+): number {
+  if (typeof draft.teams === "number" && typeof draft.rounds === "number") {
+    return draft.teams * draft.rounds;
+  }
+
+  return teamCount * rounds;
+}
+
 export async function GET() {
   try {
     /*
-     * Determine whether we're using the mock or
-     * real draft.
-     */
-    let draft = await getActiveDraft();
-
-    /*
-     * Fetch the latest draft state and picks.
+     * IMPORTANT:
      *
-     * These are the dynamic pieces of information
-     * that change throughout the draft.
+     * These are the only live requests we need on
+     * each polling cycle:
+     *
+     * 1. Current draft state
+     * 2. Current draft picks
+     *
+     * The league/users/rosters data comes from cache.
      */
-    const [latestDraft, picks] = await Promise.all([
-      sleeperFetch<SleeperDraft>(`/draft/${draft.draft_id}`),
+    const activeDraft = await getActiveDraft();
 
-      sleeperFetch<SleeperPick[]>(`/draft/${draft.draft_id}/picks`),
+    const activeDraftId =
+      MOCK_DRAFT_ID.trim() !== "" ? MOCK_DRAFT_ID : REAL_DRAFT_ID;
+
+    const [picks, staticData] = await Promise.all([
+      sleeperFetch<SleeperPick[]>(`/draft/${activeDraftId}/picks`),
+      getStaticData(),
     ]);
 
-    draft = latestDraft;
-
-    const staticData = await getStaticData(draft);
-
-    const { league, users, rosters, slotToRosterId } = staticData;
-
-    const usersById = new Map(users.map((user) => [user.user_id, user]));
-
-    const rostersById = new Map(
-      rosters.map((roster) => [roster.roster_id, roster]),
-    );
-
-    const teams = getDraftTeams(draft);
-
-    const rounds = getDraftRounds(draft);
-
-    const totalPicks = teams * rounds;
+    const { league, users, rosters } = staticData;
 
     /*
-     * Normalize all picks into the real league roster IDs.
-     *
-     * This is important because mock drafts can use
-     * different roster IDs internally.
+     * Build lookup maps once per request.
      */
-    const normalizedPicks: DraftPick[] = picks
+    const userById = new Map<string, SleeperUser>();
+
+    for (const user of users) {
+      userById.set(user.user_id, user);
+    }
+
+    const rosterById = new Map<number, SleeperRoster>();
+
+    for (const roster of rosters) {
+      rosterById.set(roster.roster_id, roster);
+    }
+
+    const teamCount = league.total_rosters || 12;
+
+    const rounds =
+      typeof activeDraft.rounds === "number" ? activeDraft.rounds : 16;
+
+    const totalPicks = getTotalPicks(activeDraft, teamCount, rounds);
+
+    /*
+     * This mapping belongs to the real league and
+     * tells us which roster owns each draft slot.
+     *
+     * We use it for mock drafts too because the mock
+     * draft is using the same league's 12 drafters.
+     */
+    const realSlotToRosterId = staticData.realDraft.slot_to_roster_id ?? {};
+
+    const rosterByDraftSlot = new Map<number, SleeperRoster>();
+
+    for (const [slot, rosterId] of Object.entries(realSlotToRosterId)) {
+      const roster = rosterById.get(rosterId);
+
+      if (roster) {
+        rosterByDraftSlot.set(Number(slot), roster);
+      }
+    }
+
+    /*
+     * Normalize Sleeper picks into the data structure
+     * used by the overlay.
+     */
+    const normalizedPicks: DraftPick[] = [...picks]
       .sort((a, b) => a.pick_no - b.pick_no)
       .map((pick) => {
-        const realRosterId =
-          slotToRosterId[String(pick.draft_slot)] ?? Number(pick.roster_id);
+        /*
+         * Sleeper mock drafts provide draft_slot
+         * directly, so prefer that.
+         */
+        let draftSlot =
+          typeof pick.draft_slot === "number" && pick.draft_slot > 0
+            ? pick.draft_slot
+            : null;
 
-        const roster = rostersById.get(realRosterId);
+        let roster: SleeperRoster | undefined;
 
-        const user = roster ? usersById.get(roster.owner_id) : undefined;
+        /*
+         * Real draft:
+         * roster_id should identify the roster.
+         */
+        if (pick.roster_id !== null) {
+          roster = rosterById.get(pick.roster_id);
 
-        const teamName = getTeamName(user, roster, realRosterId);
+          if (roster && draftSlot === null) {
+            draftSlot = getDraftSlot(realSlotToRosterId, pick.roster_id);
+          }
+        }
+
+        /*
+         * Mock draft:
+         * use draft_slot to find the real
+         * league roster.
+         */
+        if (!roster && draftSlot !== null) {
+          roster = rosterByDraftSlot.get(draftSlot);
+        }
+
+        /*
+         * Final fallback if Sleeper ever omits
+         * draft_slot.
+         */
+        if (draftSlot === null) {
+          draftSlot = getSnakeDraftSlot(pick.pick_no, teamCount);
+
+          roster = roster ?? rosterByDraftSlot.get(draftSlot);
+        }
+
+        const user = roster ? userById.get(roster.owner_id) : undefined;
+
+        const rosterId = roster?.roster_id ?? 0;
+
+        const teamName = roster
+          ? getTeamName(user, roster, roster.roster_id)
+          : `Team ${draftSlot}`;
+
+        const username = roster ? getUsername(user, roster) : "";
 
         return {
           pickNo: pick.pick_no,
 
           round: pick.round,
 
-          draftSlot: pick.draft_slot,
+          draftSlot,
 
-          rosterId: realRosterId,
+          rosterId,
 
           teamName,
+
+          username,
 
           player: normalizePlayer(pick),
         };
@@ -329,90 +393,91 @@ export async function GET() {
 
     const completedPicks = normalizedPicks.length;
 
-    const nextPickNumber =
-      completedPicks < totalPicks ? completedPicks + 1 : null;
+    const draftComplete =
+      activeDraft.status === "complete" || completedPicks >= totalPicks;
+
+    const nextPickNumber = !draftComplete ? completedPicks + 1 : null;
+
+    const currentRound =
+      nextPickNumber !== null
+        ? Math.floor((nextPickNumber - 1) / teamCount) + 1
+        : null;
 
     /*
-     * Calculate the current round and draft slot
-     * using snake-draft rules.
+     * Determine who is on the clock.
      */
-    let currentRound: number | null = null;
+    const currentDraftSlot =
+      nextPickNumber !== null
+        ? getSnakeDraftSlot(nextPickNumber, teamCount)
+        : null;
 
-    let currentDraftSlot: number | null = null;
+    const currentRoster =
+      currentDraftSlot !== null
+        ? rosterByDraftSlot.get(currentDraftSlot)
+        : undefined;
 
-    if (nextPickNumber !== null) {
-      currentRound = Math.floor((nextPickNumber - 1) / teams) + 1;
-
-      const pickWithinRound = ((nextPickNumber - 1) % teams) + 1;
-
-      currentDraftSlot =
-        currentRound % 2 === 1 ? pickWithinRound : teams - pickWithinRound + 1;
-    }
+    const currentUser = currentRoster
+      ? userById.get(currentRoster.owner_id)
+      : undefined;
 
     /*
-     * Determine the current fantasy team.
+     * Build each team's roster from the picks.
      */
-    let currentTeam: DraftOverlayData["currentTeam"] = null;
+    const draftTeams: DraftTeam[] = rosters.map((roster) => {
+      const user = userById.get(roster.owner_id);
 
-    if (currentDraftSlot !== null) {
-      const currentRosterId = slotToRosterId[String(currentDraftSlot)];
+      const teamPicks = normalizedPicks
+        .filter((pick) => pick.rosterId === roster.roster_id)
+        .sort((a, b) => a.pickNo - b.pickNo);
 
-      if (currentRosterId !== undefined) {
-        const roster = rostersById.get(currentRosterId);
+      return {
+        rosterId: roster.roster_id,
 
-        const user = roster ? usersById.get(roster.owner_id) : undefined;
+        ownerId: roster.owner_id,
 
-        const teamPlayers = normalizedPicks
-          .filter((pick) => pick.rosterId === currentRosterId)
-          .map((pick) => pick.player);
+        username: getUsername(user, roster),
 
-        currentTeam = {
-          rosterId: currentRosterId,
+        teamName: getTeamName(user, roster, roster.roster_id),
 
-          name: getTeamName(user, roster, currentRosterId),
+        draftSlot: getDraftSlot(realSlotToRosterId, roster.roster_id),
 
-          players: teamPlayers,
-        };
-      }
-    }
+        players: teamPicks.map((pick) => pick.player),
+      };
+    });
 
     /*
-     * Build all fantasy teams.
-     *
-     * draftSlot is included so the frontend can
-     * determine the next team after a pick without
-     * having to make another API request.
+     * Current team information.
      */
-    const draftTeams: DraftTeam[] = Array.from(rostersById.values()).map(
-      (roster) => {
-        const user = usersById.get(roster.owner_id);
+    const currentTeam =
+      currentRoster && currentDraftSlot !== null
+        ? {
+            rosterId: currentRoster.roster_id,
 
-        const players = normalizedPicks
-          .filter((pick) => pick.rosterId === roster.roster_id)
-          .map((pick) => pick.player);
+            username: getUsername(currentUser, currentRoster),
 
-        const draftSlotEntry = Object.entries(slotToRosterId).find(
-          ([, rosterId]) => rosterId === roster.roster_id,
-        );
+            name: getTeamName(
+              currentUser,
+              currentRoster,
+              currentRoster.roster_id,
+            ),
 
-        return {
-          rosterId: roster.roster_id,
-
-          ownerId: roster.owner_id,
-
-          teamName: getTeamName(user, roster, roster.roster_id),
-
-          players,
-
-          draftSlot: draftSlotEntry ? Number(draftSlotEntry[0]) : null,
-        } as DraftTeam;
-      },
-    );
+            players:
+              draftTeams.find(
+                (team) => team.rosterId === currentRoster!.roster_id,
+              )?.players ?? [],
+          }
+        : null;
 
     /*
-     * Last four overall picks.
-     *
-     * Newest pick appears first.
+     * Most recent pick.
+     */
+    const lastPick =
+      normalizedPicks.length > 0
+        ? normalizedPicks[normalizedPicks.length - 1]
+        : null;
+
+    /*
+     * Last four picks, newest first.
      */
     const lastFourPicks = normalizedPicks
       .slice(-4)
@@ -420,15 +485,12 @@ export async function GET() {
       .map((pick) => ({
         teamName: pick.teamName,
 
+        username: pick.username,
+
         player: pick.player,
       }));
 
-    const lastPick =
-      normalizedPicks.length > 0
-        ? normalizedPicks[normalizedPicks.length - 1]
-        : null;
-
-    const response: DraftOverlayData = {
+    const responseData: DraftOverlayData = {
       league: {
         id: league.league_id,
 
@@ -438,13 +500,13 @@ export async function GET() {
       },
 
       draft: {
-        id: draft.draft_id,
+        id: activeDraft.draft_id,
 
-        type: draft.type,
+        type: activeDraft.type,
 
-        status: draft.status,
+        status: activeDraft.status,
 
-        teams,
+        teams: teamCount,
 
         rounds,
 
@@ -467,10 +529,14 @@ export async function GET() {
         ? {
             teamName: lastPick.teamName,
 
+            username: lastPick.username,
+
             player: lastPick.player,
           }
         : {
             teamName: null,
+
+            username: null,
 
             player: null,
           },
@@ -482,16 +548,31 @@ export async function GET() {
       picks: normalizedPicks,
     };
 
-    return NextResponse.json(response);
+    return NextResponse.json(responseData, {
+      headers: {
+        /*
+         * Never let the browser/CDN serve an
+         * old draft state.
+         */
+        "Cache-Control":
+          "no-store, no-cache, must-revalidate, proxy-revalidate",
+        Pragma: "no-cache",
+        Expires: "0",
+      },
+    });
   } catch (error) {
     console.error("Fantasy draft API error:", error);
 
     return NextResponse.json(
       {
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: "Failed to load fantasy draft data.",
       },
       {
         status: 500,
+        headers: {
+          "Cache-Control": "no-store",
+          Pragma: "no-cache",
+        },
       },
     );
   }
