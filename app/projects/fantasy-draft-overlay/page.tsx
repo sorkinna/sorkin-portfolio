@@ -6,8 +6,6 @@ import DraftOverlay from "./components/DraftOverlay";
 
 export default function FantasyDraftOverlayPage() {
   return (
-    <main className="relative h-screen w-screen overflow-hidden bg-transparent">
-      <DraftOverlay />
-    </main>
+    <main className="relative h-screen w-screen overflow-hidden bg-transparent"></main>
   );
 }
