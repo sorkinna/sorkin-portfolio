@@ -11,6 +11,7 @@ type Contestant = {
   team: string;
   eliminated: boolean;
   immunity_weight: number;
+  season: number;
 };
 
 export default function PredictionsPage() {
@@ -20,6 +21,8 @@ export default function PredictionsPage() {
   const [immunityPick, setImmunityPick] = useState("");
   const [eliminatedPick, setEliminatedPick] = useState("");
   const [currentEpisode, setCurrentEpisode] = useState(1);
+  const [currentSeason, setCurrentSeason] = useState<number | null>(null);
+
   const [guestId, setGuestId] = useState("");
   const [isGuest, setIsGuest] = useState(false);
   const [guestName, setGuestName] = useState("");
@@ -41,57 +44,109 @@ export default function PredictionsPage() {
 
   useEffect(() => {
     const fetchData = async () => {
-      const { data } = await supabase.from("contestants").select("*");
+      // Get active season
+      const { data: seasonSetting, error: seasonError } = await supabase
+        .from("settings")
+        .select("value")
+        .eq("key", "current_season")
+        .single();
+
+      if (seasonError || !seasonSetting) {
+        console.error("Could not load current season:", seasonError);
+        return;
+      }
+
+      const season = Number(seasonSetting.value);
+
+      if (Number.isNaN(season)) {
+        console.error("Invalid current_season setting:", seasonSetting.value);
+        return;
+      }
+
+      setCurrentSeason(season);
+
+      // Get contestants for active season only
+      const { data, error } = await supabase
+        .from("contestants")
+        .select("*")
+        .eq("season", season);
+
+      if (error) {
+        console.error("Could not load contestants:", error);
+        return;
+      }
 
       if (data) {
         setContestants(data);
-        setTeams([...new Set(data.map((c) => c.team))]);
+
+        setTeams(
+          Array.from(
+            new Set(
+              data
+                .map((c) => c.team)
+                .filter((team) => team && team.trim() !== ""),
+            ),
+          ),
+        );
       }
 
-      const { data: settings } = await supabase
+      // Get current episode
+      const { data: episodeSetting, error: episodeError } = await supabase
         .from("settings")
         .select("value")
         .eq("key", "current_episode")
         .single();
 
-      if (settings) setCurrentEpisode(parseInt(settings.value));
+      if (episodeError || !episodeSetting) {
+        console.error("Could not load current episode:", episodeError);
+        return;
+      }
+
+      setCurrentEpisode(parseInt(episodeSetting.value));
     };
 
     fetchData();
   }, []);
 
-const handleSubmit = async () => {
-  if (!isGuest && (!team || !immunityPick || !eliminatedPick)) {
-    alert("Fill everything out");
-    return;
-  }
+  const handleSubmit = async () => {
+    if (currentSeason === null) {
+      alert("Could not determine the current season.");
+      return;
+    }
 
-  if (isGuest && (!guestName || !immunityPick || !eliminatedPick)) {
-    alert("Fill everything out");
-    return;
-  }
+    if (!isGuest && (!team || !immunityPick || !eliminatedPick)) {
+      alert("Fill everything out");
+      return;
+    }
 
-  try {
-      // Check for existing submission
+    if (isGuest && (!guestName || !immunityPick || !eliminatedPick)) {
+      alert("Fill everything out");
+      return;
+    }
+
+    try {
+      // Check for existing team submission
       if (!isGuest) {
         const { data: existing } = await supabase
           .from("predictions")
           .select("id")
           .eq("team", team)
           .eq("episode", currentEpisode)
+          .eq("season", currentSeason)
           .limit(1);
 
         if (existing && existing.length > 0) {
           alert("You already submitted for this episode");
           return;
         }
-      }
-      else{
+      } else {
+        // Check for existing guest submission
         const { data: existing } = await supabase
           .from("public_predictions")
           .select("id")
           .eq("guest_id", guestId)
           .eq("episode", currentEpisode)
+          .eq("season", currentSeason)
           .limit(1);
 
         if (existing && existing.length > 0) {
@@ -105,21 +160,20 @@ const handleSubmit = async () => {
         return;
       }
 
-      const contestant = contestants.find(c => c.id === immunityPick);
-      
+      const contestant = contestants.find((c) => c.id === immunityPick);
+
       if (isGuest) {
-        const { error } = await supabase
-          .from("public_predictions")
-          .insert({
-            guest_id: guestId,
-            name: guestName,
-            team_1: team1,
-            team_2: team2 || null,
-            immunity_pick: immunityPick,
-            immunity_weight: contestant?.immunity_weight,
-            eliminated_pick: eliminatedPick,
-            episode: currentEpisode,
-          });
+        const { error } = await supabase.from("public_predictions").insert({
+          guest_id: guestId,
+          name: guestName,
+          team_1: team1,
+          team_2: team2 || null,
+          immunity_pick: immunityPick,
+          immunity_weight: contestant?.immunity_weight,
+          eliminated_pick: eliminatedPick,
+          episode: currentEpisode,
+          season: currentSeason,
+        });
 
         if (error) {
           if (error.code === "23505") {
@@ -128,16 +182,16 @@ const handleSubmit = async () => {
             throw error;
           }
         }
-      }
-      else{
+      } else {
         const { error } = await supabase.from("predictions").insert({
           team,
           immunity_pick: immunityPick,
           immunity_weight: contestant?.immunity_weight,
           eliminated_pick: eliminatedPick,
           episode: currentEpisode,
+          season: currentSeason,
         });
-      
+
         if (error) throw error;
       }
 
@@ -148,10 +202,9 @@ const handleSubmit = async () => {
     }
   };
 
-return (
+  return (
     <div className="min-h-screen bg-[#F4EFE6] p-6 flex justify-center">
       <div className="bg-white p-6 rounded-2xl shadow-md w-full max-w-md space-y-5">
-        
         <h1 className="text-xl font-semibold text-[#3E2F1C]">
           Make Your Predictions
         </h1>
@@ -174,6 +227,7 @@ return (
             className="w-full bg-white text-base text-[#3E2F1C] border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
           >
             <option value="">Select Team</option>
+
             {teams.map((t) => (
               <option key={t} value={t}>
                 {t}
@@ -189,6 +243,7 @@ return (
           className="w-full bg-white text-base text-[#3E2F1C] border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
         >
           <option value="">Immunity Winner</option>
+
           {contestants
             .filter((c) => !c.eliminated)
             .sort((a, b) => a.immunity_weight - b.immunity_weight)
@@ -206,6 +261,7 @@ return (
           className="w-full bg-white text-base text-[#3E2F1C] border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
         >
           <option value="">Eliminated Player</option>
+
           {contestants
             .filter((c) => !c.eliminated)
             .map((c) => (
@@ -231,6 +287,7 @@ return (
               className="w-full bg-white text-base text-[#3E2F1C] font-medium border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
             >
               <option value="">Select Team</option>
+
               {teams.map((t) => (
                 <option key={t}>{t}</option>
               ))}
@@ -242,6 +299,7 @@ return (
               className="w-full bg-white text-base text-[#3E2F1C] font-medium border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
             >
               <option value="">Second team (optional)</option>
+
               {teams
                 .filter((t) => t !== team1)
                 .map((t) => (

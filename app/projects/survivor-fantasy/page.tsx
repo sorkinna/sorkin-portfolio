@@ -1,21 +1,40 @@
 "use client";
 export const dynamic = "force-dynamic";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 
-type Contestant = { id: string; name: string; team: string; eliminated: boolean; };
-type PointEvent = { contestant_id: string; points: number; episode: number; reason?: string; created_at: string; team: string; type: string;};
+type Contestant = {
+  id: string;
+  name: string;
+  team: string;
+  eliminated: boolean;
+  season: number;
+};
+
+type PointEvent = {
+  contestant_id: string;
+  points: number;
+  episode: number;
+  reason?: string;
+  created_at: string;
+  team: string;
+  type: string;
+  season: number;
+};
 
 export default function SurvivorFantasy() {
+  const currentSeasonRef = useRef<number | null>(null);
   const [contestants, setContestants] = useState<Contestant[]>([]);
   const [pointEvents, setPointEvents] = useState<PointEvent[]>([]);
+  const [currentSeason, setCurrentSeason] = useState<number | null>(null);
   const [showBannerS, setShowBannerS] = useState(false);
   const [showBannerP, setShowBannerP] = useState(false);
   const [searchSubmitted, setSearchSubmitted] = useState(false);
-  const [selectedContestant, setSelectedContestant] = useState<Contestant | null>(null);
+  const [selectedContestant, setSelectedContestant] =
+    useState<Contestant | null>(null);
   const [contestantEvents, setContestantEvents] = useState<PointEvent[]>([]);
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
   const [teamPredictions, setTeamPredictions] = useState<any[]>([]);
@@ -49,10 +68,48 @@ export default function SurvivorFantasy() {
 
   useEffect(() => {
     async function fetchData() {
-      const { data: contestantsData } = await supabase
+      // Get the currently active Survivor season
+      const { data: seasonSetting, error: seasonError } = await supabase
+        .from("settings")
+        .select("value")
+        .eq("key", "current_season")
+        .single();
+
+      if (seasonError || !seasonSetting) {
+        console.error("Could not load current season:", seasonError);
+        return;
+      }
+
+      const season = Number(seasonSetting.value);
+
+      if (Number.isNaN(season)) {
+        console.error("Invalid current_season setting:", seasonSetting.value);
+        return;
+      }
+
+      setCurrentSeason(season);
+      currentSeasonRef.current = season;
+
+      // Only load contestants from the current season
+      const { data: contestantsData, error: contestantsError } = await supabase
         .from("contestants")
-        .select("*");
-      const { data: eventsData } = await supabase.from("point_events").select("*");
+        .select("*")
+        .eq("season", season);
+
+      if (contestantsError) {
+        console.error("Could not load contestants:", contestantsError);
+      }
+
+      // Only load point events from the current season
+      const { data: eventsData, error: eventsError } = await supabase
+        .from("point_events")
+        .select("*")
+        .eq("season", season);
+
+      if (eventsError) {
+        console.error("Could not load point events:", eventsError);
+      }
+
       setContestants(contestantsData || []);
       setPointEvents(eventsData || []);
     }
@@ -63,12 +120,21 @@ export default function SurvivorFantasy() {
       .channel("point-events")
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "point_events" },
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "point_events",
+        },
         (payload) => {
           if (!payload || !payload.new) return;
+
           const newEvent = payload.new as PointEvent;
-          setPointEvents((prev) => [...prev, newEvent]);
-        }
+
+          // Only add realtime events belonging to the current season
+          if (currentSeason !== null && newEvent.season === currentSeason) {
+            setPointEvents((prev) => [...prev, newEvent]);
+          }
+        },
       )
       .subscribe();
 
@@ -80,7 +146,8 @@ export default function SurvivorFantasy() {
   // Aggregate totals
   const totals: Record<string, number> = {};
   pointEvents.forEach((event) => {
-    totals[event.contestant_id] = (totals[event.contestant_id] || 0) + event.points;
+    totals[event.contestant_id] =
+      (totals[event.contestant_id] || 0) + event.points;
   });
 
   const contestantsWithPoints = contestants.map((c) => ({
@@ -111,8 +178,7 @@ export default function SurvivorFantasy() {
       .filter((e) => e.contestant_id === contestant.id)
       .sort(
         (a, b) =>
-          new Date(b.created_at).getTime() -
-          new Date(a.created_at).getTime()
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
       )
       .slice(0, 50);
 
@@ -127,19 +193,29 @@ export default function SurvivorFantasy() {
     setPublicPredictions([]);
     setEpisodeResults([]);
 
+    const season = currentSeasonRef.current;
+
+    if (season === null) {
+      setIsLoadingTeam(false);
+      return;
+    }
+
     const { data: predictionsData } = await supabase
       .from("predictions")
       .select("*")
       .eq("team", team)
+      .eq("season", season)
       .order("episode", { ascending: false });
 
     const { data: publicData } = await supabase
       .from("public_predictions")
-      .select("*");
+      .select("*")
+      .eq("season", season);
 
     const { data: resultsData } = await supabase
       .from("episode_results")
-      .select("*");
+      .select("*")
+      .eq("season", season);
 
     if (predictionsData) setTeamPredictions(predictionsData);
     if (resultsData) setEpisodeResults(resultsData);
@@ -147,10 +223,13 @@ export default function SurvivorFantasy() {
     setIsLoadingTeam(false);
   };
 
-  const resultsMap = episodeResults.reduce((acc, r) => {
-    acc[r.episode] = r;
-    return acc;
-  }, {} as Record<number, any>);
+  const resultsMap = episodeResults.reduce(
+    (acc, r) => {
+      acc[r.episode] = r;
+      return acc;
+    },
+    {} as Record<number, any>,
+  );
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -172,13 +251,16 @@ export default function SurvivorFantasy() {
         .reduce((sum, e) => sum + e.points, 0)
     : 0;
 
-  const groupedEvents = contestantEvents.reduce((groups: Record<number, PointEvent[]>, event) => {
-    if (!groups[event.episode]) {
-      groups[event.episode] = [];
-    }
-    groups[event.episode].push(event);
-    return groups;
-  }, {});
+  const groupedEvents = contestantEvents.reduce(
+    (groups: Record<number, PointEvent[]>, event) => {
+      if (!groups[event.episode]) {
+        groups[event.episode] = [];
+      }
+      groups[event.episode].push(event);
+      return groups;
+    },
+    {},
+  );
 
   const visibleEvents = pointEvents
     .filter((e) => e.type !== "team")
@@ -188,7 +270,7 @@ export default function SurvivorFantasy() {
   return (
     <div className="min-h-screen px-4 sm:px-6 pt-4 sm:pt-8 pb-12 max-w-6xl mx-auto bg-[#F7F3E9]">
       <h1 className="text-3xl sm:text-5xl font-bold mb-4 sm:mb-12 text-[#3E2F1C] text-center">
-        Survivor Fantasy League
+        Survivor {currentSeason ? `Season ${currentSeason}` : ""} Fantasy League
       </h1>
 
       {/*Banner*/}
@@ -210,7 +292,6 @@ export default function SurvivorFantasy() {
 
       {/* Page Redirects */}
       <div className="flex flex-col sm:flex-row sm:justify-end gap-2 sm:gap-3 mb-3 sm:mb-4">
-        
         <Link
           href="/projects/survivor-fantasy/predictions"
           className="flex items-center justify-center text-sm sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-[#EADFC8] text-[#3E2F1C] hover:bg-[#D9C9AA] transition shadow-sm active:scale-[0.98]"
@@ -233,19 +314,20 @@ export default function SurvivorFantasy() {
             Admin
           </Link>
         )}
-
       </div>
 
       {/* Recent Activity */}
       <section className="mb-10">
-        <h2 className="text-2xl sm:text-3xl font-bold mb-3 sm:mb-4 text-[#3E2F1C]">Recent Activity</h2>
+        <h2 className="text-2xl sm:text-3xl font-bold mb-3 sm:mb-4 text-[#3E2F1C]">
+          Recent Activity
+        </h2>
         <div className="relative max-w-2xl">
           <div className="space-y-2 sm:space-y-3 max-w-2xl max-h-[38vh] sm:max-h-[580px] overflow-y-auto pr-1">
             <div className="space-y-2 sm:space-y-3 max-w-2xl">
               <AnimatePresence>
                 {visibleEvents.map((event, idx) => {
                   const contestant = contestants.find(
-                    (c) => c.id === event.contestant_id
+                    (c) => c.id === event.contestant_id,
                   );
                   if (!contestant) return null;
 
@@ -264,7 +346,10 @@ export default function SurvivorFantasy() {
                         <img
                           src={`/images/contestants/${imgName}.png`}
                           alt={contestant.name}
-                          onError={(e) => { (e.target as HTMLImageElement).src = '/images/placeholder.png'; }}
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src =
+                              "/images/placeholder.png";
+                          }}
                           className="w-12 h-16 sm:w-14 sm:h-20 object-contain rounded-lg bg-neutral-200"
                         />
 
@@ -275,7 +360,9 @@ export default function SurvivorFantasy() {
                         >
                           <span
                             className={`font-medium text-lg ${
-                              event.points > 0 ? "text-green-700" : "text-red-700"
+                              event.points > 0
+                                ? "text-green-700"
+                                : "text-red-700"
                             }`}
                           >
                             {contestant.name} ({event.points > 0 ? "+" : ""}
@@ -299,7 +386,9 @@ export default function SurvivorFantasy() {
 
       {/*Team Ranking Section*/}
       <section className="mb-10">
-        <h2 className="text-2xl sm:text-3xl font-bold mb-3 sm:mb-4 text-[#3E2F1C]">Team Rankings</h2>
+        <h2 className="text-2xl sm:text-3xl font-bold mb-3 sm:mb-4 text-[#3E2F1C]">
+          Team Rankings
+        </h2>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
           {sortedTeams.map(([team, teamPoints]) => {
@@ -345,10 +434,15 @@ export default function SurvivorFantasy() {
                           <img
                             src={`/images/contestants/${imgName}.png`}
                             alt={member.name}
-                            onError={(e) => { (e.target as HTMLImageElement).src = '/images/placeholder.png'; }}
-                            className="w-14 h-20 sm:w-16 sm:h-24 object-contain rounded-lg bg-neutral-200"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src =
+                                "/images/placeholder.png";
+                            }}
+                            className="w-14 h-20 sm:w-16 sm:h-24 object-cover rounded-lg"
                           />
-                          <span className={`text-lg font-medium ${member.eliminated ? "text-red-600 line-through opacity-70": "text-[#3E2F1C]"}`}>
+                          <span
+                            className={`text-lg font-medium ${member.eliminated ? "text-red-600 line-through opacity-70" : "text-[#3E2F1C]"}`}
+                          >
                             {member.name}
                           </span>
                         </div>
@@ -372,17 +466,28 @@ export default function SurvivorFantasy() {
           Scoring System
         </summary>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-[#3E2F1C] text-sm sm:text-base">
-
           {/* Challenges */}
           <div>
             <h3 className="font-semibold text-lg mb-3">🏆 Challenges</h3>
             <ul className="space-y-1">
-              <li>Individual Immunity Win – <strong>6 pts</strong></li>
-              <li>Team Immunity Win – <strong>4 pts</strong></li>
-              <li>Team Immunity 2nd Place – <strong>2 pts</strong></li>
-              <li>Individual Reward Win – <strong>3 pts</strong></li>
-              <li>Team Reward Win – <strong>2 pts</strong></li>
-              <li>Team Reward 2nd Place – <strong>1 pt</strong></li>
+              <li>
+                Individual Immunity Win – <strong>6 pts</strong>
+              </li>
+              <li>
+                Team Immunity Win – <strong>4 pts</strong>
+              </li>
+              <li>
+                Team Immunity 2nd Place – <strong>2 pts</strong>
+              </li>
+              <li>
+                Individual Reward Win – <strong>3 pts</strong>
+              </li>
+              <li>
+                Team Reward Win – <strong>2 pts</strong>
+              </li>
+              <li>
+                Team Reward 2nd Place – <strong>1 pt</strong>
+              </li>
             </ul>
           </div>
 
@@ -390,11 +495,21 @@ export default function SurvivorFantasy() {
           <div>
             <h3 className="font-semibold text-lg mb-3">🔥 Milestones</h3>
             <ul className="space-y-1">
-              <li>Sole Survivor – <strong>15 pts</strong></li>
-              <li>Makes the Merge – <strong>5 pts</strong></li>
-              <li>Find Hidden Immunity Idol – <strong>6 pts</strong></li>
-              <li>Receive Advantage – <strong>2 pts</strong></li>
-              <li>Receive Disadvantage – <strong>-1 pt</strong></li>
+              <li>
+                Sole Survivor – <strong>15 pts</strong>
+              </li>
+              <li>
+                Makes the Merge – <strong>5 pts</strong>
+              </li>
+              <li>
+                Find Hidden Immunity Idol – <strong>6 pts</strong>
+              </li>
+              <li>
+                Receive Advantage – <strong>2 pts</strong>
+              </li>
+              <li>
+                Receive Disadvantage – <strong>-1 pt</strong>
+              </li>
             </ul>
           </div>
 
@@ -402,10 +517,18 @@ export default function SurvivorFantasy() {
           <div>
             <h3 className="font-semibold text-lg mb-3">🗳 Tribal</h3>
             <ul className="space-y-1">
-              <li>Vote Correctly – <strong>1 pt</strong></li>
-              <li>Vote Incorrectly – <strong>-1 pt</strong></li>
-              <li>Play Idol Correctly – <strong>10 pts</strong></li>
-              <li>Play Idol Incorrectly – <strong>-4 pts</strong></li>
+              <li>
+                Vote Correctly – <strong>1 pt</strong>
+              </li>
+              <li>
+                Vote Incorrectly – <strong>-1 pt</strong>
+              </li>
+              <li>
+                Play Idol Correctly – <strong>10 pts</strong>
+              </li>
+              <li>
+                Play Idol Incorrectly – <strong>-4 pts</strong>
+              </li>
             </ul>
           </div>
 
@@ -413,10 +536,18 @@ export default function SurvivorFantasy() {
           <div>
             <h3 className="font-semibold text-lg mb-3">😈 Sorkin Meter</h3>
             <ul className="space-y-1">
-              <li>Good Confessional – <strong>? pts</strong></li>
-              <li>Iconic Moment – <strong>? pts</strong></li>
-              <li>Orchestrated Blindside – <strong>? pts</strong></li>
-              <li>Cringe Status – <strong>-? pts</strong></li>
+              <li>
+                Good Confessional – <strong>? pts</strong>
+              </li>
+              <li>
+                Iconic Moment – <strong>? pts</strong>
+              </li>
+              <li>
+                Orchestrated Blindside – <strong>? pts</strong>
+              </li>
+              <li>
+                Cringe Status – <strong>-? pts</strong>
+              </li>
             </ul>
           </div>
         </div>
@@ -433,7 +564,6 @@ export default function SurvivorFantasy() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center gap-4 mb-4">
-
               {(() => {
                 const imgName = selectedContestant.name.replace(/ /g, "_");
                 return (
@@ -441,7 +571,8 @@ export default function SurvivorFantasy() {
                     src={`/images/contestants/${imgName}.png`}
                     alt={selectedContestant.name}
                     onError={(e) => {
-                      (e.target as HTMLImageElement).src = "/images/placeholder.png";
+                      (e.target as HTMLImageElement).src =
+                        "/images/placeholder.png";
                     }}
                     className="w-16 h-24 object-contain rounded-lg bg-neutral-200"
                   />
@@ -467,42 +598,44 @@ export default function SurvivorFantasy() {
             </div>
 
             <div className="space-y-2 max-h-[400px] overflow-y-auto">
-
               {contestantEvents.length === 0 && (
                 <p className="text-sm text-gray-500">No scoring events yet.</p>
               )}
 
-              {Object.entries(groupedEvents).sort((a, b) => Number(b[0]) - Number(a[0])).map(([episode, events]) => (
-                <div key={episode} className="mb-3">
+              {Object.entries(groupedEvents)
+                .sort((a, b) => Number(b[0]) - Number(a[0]))
+                .map(([episode, events]) => (
+                  <div key={episode} className="mb-3">
+                    <h3 className="text-sm font-semibold text-[#3E2F1C]/70 mb-1">
+                      Episode {episode} -{" "}
+                      {events.reduce((sum, e) => sum + e.points, 0)} pts
+                    </h3>
 
-                  <h3 className="text-sm font-semibold text-[#3E2F1C]/70 mb-1">
-                    Episode {episode} -  {events.reduce((sum, e) => sum + e.points, 0)} pts
-                  </h3>
-
-                  <div className="space-y-2">
-                    {events.map((event, i) => (
-                      <div
-                        key={i}
-                        className="flex justify-between bg-[#F7F3E9] p-2 rounded-lg"
-                      >
-                        <span className="text-[#3E2F1C] text-sm">
-                          {event.reason || "No reason"}
-                        </span>
-
-                        <span
-                          className={`font-semibold ${
-                            event.points > 0 ? "text-green-600" : "text-red-600"
-                          }`}
+                    <div className="space-y-2">
+                      {events.map((event, i) => (
+                        <div
+                          key={i}
+                          className="flex justify-between bg-[#F7F3E9] p-2 rounded-lg"
                         >
-                          {event.points > 0 ? "+" : ""}
-                          {event.points}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
+                          <span className="text-[#3E2F1C] text-sm">
+                            {event.reason || "No reason"}
+                          </span>
 
-                </div>
-              ))}
+                          <span
+                            className={`font-semibold ${
+                              event.points > 0
+                                ? "text-green-600"
+                                : "text-red-600"
+                            }`}
+                          >
+                            {event.points > 0 ? "+" : ""}
+                            {event.points}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
             </div>
           </div>
         </div>
@@ -536,15 +669,15 @@ export default function SurvivorFantasy() {
                 <p className="text-sm text-gray-500 italic">
                   Loading predictions...
                 </p>
-              ) : teamPredictions.length === 0 && (
-                <p className="text-sm text-gray-500">
-                  No predictions yet.
-                </p>
+              ) : (
+                teamPredictions.length === 0 && (
+                  <p className="text-sm text-gray-500">No predictions yet.</p>
+                )
               )}
 
               {teamPredictions.map((p, i) => {
                 const result = episodeResults.find(
-                  (r) => r.episode === p.episode
+                  (r) => r.episode === p.episode,
                 );
 
                 const guestEventsForEpisode = pointEvents.filter(
@@ -552,44 +685,52 @@ export default function SurvivorFantasy() {
                     e.type === "team" &&
                     e.team === selectedTeam &&
                     e.episode === p.episode &&
-                    e.reason?.startsWith("Guest (")
+                    e.reason?.startsWith("Guest ("),
                 );
 
-                const guestBreakdown = guestEventsForEpisode.map((e) => {
-                  const guestName = e.reason?.match(/Guest \((.*?)\)/)?.[1] || "Guest";
+                const guestBreakdown = guestEventsForEpisode
+                  .map((e) => {
+                    const guestName =
+                      e.reason?.match(/Guest \((.*?)\)/)?.[1] || "Guest";
 
-                  const prediction = publicPredictions.find(
-                    (gp) =>
-                      gp.episode === e.episode &&
-                      (gp.team_1 === selectedTeam || gp.team_2 === selectedTeam) &&
-                      gp.name === guestName
-                  );
+                    const prediction = publicPredictions.find(
+                      (gp) =>
+                        gp.episode === e.episode &&
+                        (gp.team_1 === selectedTeam ||
+                          gp.team_2 === selectedTeam) &&
+                        gp.name === guestName,
+                    );
 
-                  if (!prediction) return null;
+                    if (!prediction) return null;
 
-                  const result = episodeResults.find(r => r.episode === e.episode);
+                    const result = episodeResults.find(
+                      (r) => r.episode === e.episode,
+                    );
 
-                  const immunityCorrect =
-                    prediction.immunity_pick === result?.immunity_winner;
+                    const immunityCorrect =
+                      prediction.immunity_pick === result?.immunity_winner;
 
-                  const eliminatedCorrect =
-                    prediction.eliminated_pick === result?.eliminated_player;
+                    const eliminatedCorrect =
+                      prediction.eliminated_pick === result?.eliminated_player;
 
-                  const immunityName =
-                    contestants.find(c => c.id === prediction.immunity_pick)?.name;
+                    const immunityName = contestants.find(
+                      (c) => c.id === prediction.immunity_pick,
+                    )?.name;
 
-                  const eliminatedName =
-                    contestants.find(c => c.id === prediction.eliminated_pick)?.name;
+                    const eliminatedName = contestants.find(
+                      (c) => c.id === prediction.eliminated_pick,
+                    )?.name;
 
-                  return {
-                    guestName,
-                    immunityCorrect,
-                    eliminatedCorrect,
-                    immunityName,
-                    eliminatedName,
-                    totalPoints: e.points,
-                  };
-                }).filter((g): g is NonNullable<typeof g> => g !== null);
+                    return {
+                      guestName,
+                      immunityCorrect,
+                      eliminatedCorrect,
+                      immunityName,
+                      eliminatedName,
+                      totalPoints: e.points,
+                    };
+                  })
+                  .filter((g): g is NonNullable<typeof g> => g !== null);
 
                 const immunityCorrect =
                   result && p.immunity_pick === result.immunity_winner;
@@ -598,11 +739,11 @@ export default function SurvivorFantasy() {
                   result && p.eliminated_pick === result.eliminated_player;
 
                 const totalPoints =
-                  (immunityCorrect ? p.immunity_weight_snapshot : 0) + (eliminatedCorrect ? 5 : 0);
+                  (immunityCorrect ? p.immunity_weight_snapshot : 0) +
+                  (eliminatedCorrect ? 5 : 0);
 
                 return (
                   <div key={i} className="bg-[#F7F3E9] p-3 rounded-lg">
-                    
                     {/* Episode header */}
                     <div className="text-sm text-[#3E2F1C]/70 mb-1">
                       Episode {p.episode}
@@ -610,22 +751,27 @@ export default function SurvivorFantasy() {
 
                     {/* Results */}
                     <div className="mt-2 text-sm text-[#3E2F1C] space-y-1">
-
                       {(() => {
                         const immunityPickName =
-                          contestants.find(c => c.id === p.immunity_pick)?.name || "—";
+                          contestants.find((c) => c.id === p.immunity_pick)
+                            ?.name || "—";
 
                         const eliminatedPickName =
-                          contestants.find(c => c.id === p.eliminated_pick)?.name || "—";
+                          contestants.find((c) => c.id === p.eliminated_pick)
+                            ?.name || "—";
 
-                        const result = episodeResults.find(r => r.episode === p.episode);
+                        const result = episodeResults.find(
+                          (r) => r.episode === p.episode,
+                        );
 
                         // 🟡 UNRESOLVED STATE
                         if (!result) {
                           return (
                             <div className="space-y-1">
                               <div>🛡 Immunity Pick: {immunityPickName}</div>
-                              <div>🔥 Eliminated Pick: {eliminatedPickName}</div>
+                              <div>
+                                🔥 Eliminated Pick: {eliminatedPickName}
+                              </div>
                               <div className="text-gray-400 italic">
                                 Episode is unresolved
                               </div>
@@ -635,42 +781,60 @@ export default function SurvivorFantasy() {
 
                         // 🟢 RESOLVED STATE
                         const actualImmunity =
-                          contestants.find(c => c.id === result.immunity_winner)?.name || "—";
+                          contestants.find(
+                            (c) => c.id === result.immunity_winner,
+                          )?.name || "—";
 
                         const actualEliminated =
-                          contestants.find(c => c.id === result.eliminated_player)?.name || "—";
+                          contestants.find(
+                            (c) => c.id === result.eliminated_player,
+                          )?.name || "—";
 
-                        const immunityCorrect = p.immunity_pick === result.immunity_winner;
-                        const eliminatedCorrect = p.eliminated_pick === result.eliminated_player;
+                        const immunityCorrect =
+                          p.immunity_pick === result.immunity_winner;
+                        const eliminatedCorrect =
+                          p.eliminated_pick === result.eliminated_player;
 
                         const totalPoints =
-                          (immunityCorrect ? p.immunity_weight : 0) + (eliminatedCorrect ? 5 : 0);
+                          (immunityCorrect ? p.immunity_weight : 0) +
+                          (eliminatedCorrect ? 5 : 0);
 
                         return (
                           <div className="space-y-1">
-                            
                             <div>
                               🛡 Immunity Pick: {immunityPickName}{" "}
-                              <span className={immunityCorrect ? "text-green-600" : "text-red-600"}>
+                              <span
+                                className={
+                                  immunityCorrect
+                                    ? "text-green-600"
+                                    : "text-red-600"
+                                }
+                              >
                                 {immunityCorrect ? "✔" : "✖"}
                               </span>
-
                               {!immunityCorrect && (
                                 <span className="text-[#3E2F1C]/70">
-                                  {" "}was {actualImmunity}
+                                  {" "}
+                                  was {actualImmunity}
                                 </span>
                               )}
                             </div>
 
                             <div>
                               🔥 Eliminated Pick: {eliminatedPickName}{" "}
-                              <span className={eliminatedCorrect ? "text-green-600" : "text-red-600"}>
+                              <span
+                                className={
+                                  eliminatedCorrect
+                                    ? "text-green-600"
+                                    : "text-red-600"
+                                }
+                              >
                                 {eliminatedCorrect ? "✔" : "✖"}
                               </span>
-
                               {!eliminatedCorrect && (
                                 <span className="text-[#3E2F1C]/70">
-                                  {" "}was {actualEliminated}
+                                  {" "}
+                                  was {actualEliminated}
                                 </span>
                               )}
                             </div>
@@ -684,34 +848,35 @@ export default function SurvivorFantasy() {
                               <div className="mt-2 space-y-1 text-sm">
                                 {guestBreakdown.map((g, idx) => (
                                   <div key={idx} className="text-[#3E2F1C]/80">
-                                    
                                     {g.immunityCorrect && (
                                       <div>
-                                        {g.guestName} predicted {g.immunityName} to win immunity —{" "}
+                                        {g.guestName} predicted {g.immunityName}{" "}
+                                        to win immunity —{" "}
                                         <span className="text-green-600 font-medium">
-                                          +{g.totalPoints - (g.eliminatedCorrect ? 5 : 0)} pts
+                                          +
+                                          {g.totalPoints -
+                                            (g.eliminatedCorrect ? 5 : 0)}{" "}
+                                          pts
                                         </span>
                                       </div>
                                     )}
 
                                     {g.eliminatedCorrect && (
                                       <div>
-                                        {g.guestName} predicted {g.eliminatedName} to be eliminated —{" "}
+                                        {g.guestName} predicted{" "}
+                                        {g.eliminatedName} to be eliminated —{" "}
                                         <span className="text-green-600 font-medium">
                                           +5 pts
                                         </span>
                                       </div>
                                     )}
-
                                   </div>
                                 ))}
                               </div>
                             )}
-
                           </div>
                         );
                       })()}
-
                     </div>
                   </div>
                 );

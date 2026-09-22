@@ -11,6 +11,7 @@ type Contestant = {
   name: string;
   team: string;
   eliminated: boolean;
+  season: number;
 };
 
 export default function SubmitPage() {
@@ -22,41 +23,90 @@ export default function SubmitPage() {
   const [reason, setReason] = useState("");
   const [team, setTeam] = useState("");
   const router = useRouter();
+
   const [currentEpisode, setCurrentEpisode] = useState<number>(1);
+  const [currentSeason, setCurrentSeason] = useState<number | null>(null);
 
   useEffect(() => {
-    const fetchCurrentEpisode = async () => {
-      const { data } = await supabase
+    const fetchSettings = async () => {
+      // Get active season
+      const { data: seasonSetting, error: seasonError } = await supabase
+        .from("settings")
+        .select("value")
+        .eq("key", "current_season")
+        .single();
+
+      if (seasonError || !seasonSetting) {
+        console.error("Could not load current season:", seasonError);
+        return;
+      }
+
+      const season = Number(seasonSetting.value);
+
+      if (Number.isNaN(season)) {
+        console.error("Invalid current_season setting:", seasonSetting.value);
+        return;
+      }
+
+      setCurrentSeason(season);
+
+      // Get current episode
+      const { data: episodeSetting, error: episodeError } = await supabase
         .from("settings")
         .select("value")
         .eq("key", "current_episode")
         .single();
 
-      if (data) setCurrentEpisode(parseInt(data.value));
+      if (episodeError || !episodeSetting) {
+        console.error("Could not load current episode:", episodeError);
+        return;
+      }
+
+      setCurrentEpisode(parseInt(episodeSetting.value));
     };
 
-    fetchCurrentEpisode();
+    fetchSettings();
   }, []);
 
   useEffect(() => {
     const fetchContestants = async () => {
-      const { data } = await supabase.from("contestants").select("*");
+      // Don't load contestants until we know the active season
+      if (currentSeason === null) return;
+
+      const { data, error } = await supabase
+        .from("contestants")
+        .select("*")
+        .eq("season", currentSeason);
+
+      if (error) {
+        console.error("Could not load contestants:", error);
+        return;
+      }
 
       if (data) {
         setContestants(data);
 
-        // Extract unique team names
         const uniqueTeams = Array.from(
-          new Set(data.map((c) => c.team))
+          new Set(
+            data
+              .map((c) => c.team)
+              .filter((team) => team && team.trim() !== ""),
+          ),
         );
+
         setTeams(uniqueTeams);
       }
     };
 
     fetchContestants();
-  }, []);
+  }, [currentSeason]);
 
   const handleSubmit = async () => {
+    if (currentSeason === null) {
+      alert("Could not determine the current season.");
+      return;
+    }
+
     if (!contestantId || points === "" || !team) {
       alert("Please fill out all required fields.");
       return;
@@ -69,9 +119,11 @@ export default function SubmitPage() {
       episode: currentEpisode,
       submitted_by: team,
       status: "pending",
+      season: currentSeason,
     });
 
     if (error) {
+      console.error("Error submitting suggestion:", error);
       alert("Error submitting suggestion.");
     } else {
       router.push("/projects/survivor-fantasy?submitted=true");
@@ -93,11 +145,14 @@ export default function SubmitPage() {
             className="bg-white text-base text-[#3E2F1C] placeholder:text-[#3E2F1C]/60 border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
           >
             <option value="">Select Contestant</option>
-            {contestants.filter((c) => !c.eliminated).map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name} ({c.team})
-              </option>
-            ))}
+
+            {contestants
+              .filter((c) => !c.eliminated)
+              .map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} ({c.team})
+                </option>
+              ))}
           </select>
 
           {/* Points */}
@@ -126,6 +181,7 @@ export default function SubmitPage() {
             className="bg-white text-base text-[#3E2F1C] placeholder:text-[#3E2F1C]/60 border border-[#3E2F1C]/30 rounded-lg px-3 py-2"
           >
             <option value="">Your Team</option>
+
             {teams.map((t) => (
               <option key={t} value={t}>
                 {t}
@@ -141,6 +197,7 @@ export default function SubmitPage() {
             Submit
           </button>
         </div>
+
         {/* Back Button */}
         <Link
           href="/projects/survivor-fantasy"
