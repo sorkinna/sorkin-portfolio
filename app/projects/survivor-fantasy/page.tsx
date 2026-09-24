@@ -131,7 +131,10 @@ export default function SurvivorFantasy() {
           const newEvent = payload.new as PointEvent;
 
           // Only add realtime events belonging to the current season
-          if (currentSeason !== null && newEvent.season === currentSeason) {
+          if (
+            currentSeasonRef.current !== null &&
+            newEvent.season === currentSeasonRef.current
+          ) {
             setPointEvents((prev) => [...prev, newEvent]);
           }
         },
